@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Vicinity Vibe",
+  "description": "A hyper-local social networking app featuring real-time maps, vibe-based discovery, boredom roulette, and business promos.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

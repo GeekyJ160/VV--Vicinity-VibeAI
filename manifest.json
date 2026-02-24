@@ -1,0 +1,22 @@
+
+{
+  "name": "Vicinity Vibe",
+  "short_name": "Vibe",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#03030a",
+  "theme_color": "#B44CFF",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://picsum.photos/id/64/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/id/64/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

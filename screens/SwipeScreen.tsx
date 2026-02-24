@@ -1,52 +1,68 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { VibeUser } from '../types';
+import { supabase } from '../supabaseClient';
+import { Heart, X, Star, MapPin, Sparkles, Filter, User } from 'lucide-react';
 
 interface SwipeScreenProps {
   userVibe: string;
   onMatch: (user: VibeUser) => void;
   isDarkMode: boolean;
+  onViewProfile?: (userId: string) => void;
 }
 
-const SwipeScreen: React.FC<SwipeScreenProps> = ({ userVibe, onMatch, isDarkMode }) => {
+const SwipeScreen: React.FC<SwipeScreenProps> = ({ userVibe, onMatch, isDarkMode, onViewProfile }) => {
   const [index, setIndex] = useState(0);
   const [showMatch, setShowMatch] = useState(false);
   const [scoredUsers, setScoredUsers] = useState<VibeUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const mockUsers: VibeUser[] = [
-    { id: '1', name: 'Alex 🌙', vibe: 'Nightlife Coffee ☕ late-night', lat: 40, lng: 30, distance: '0.2mi', verified: true, avatar: 'https://picsum.photos/id/64/400/500' },
-    { id: '2', name: 'Jamie 🎸', vibe: 'Live Music Rock concerts indie', lat: 60, lng: 70, distance: '0.5mi', verified: true, avatar: 'https://picsum.photos/id/65/400/500' },
-    { id: '3', name: 'Sam 🌳', vibe: 'Park Hangout Chill nature walking', lat: 25, lng: 45, distance: '0.1mi', verified: true, avatar: 'https://picsum.photos/id/66/400/500' },
-    { id: '4', name: 'Taylor 🍻', vibe: 'Happy Hour Beer social pub-crawl', lat: 75, lng: 20, distance: '0.9mi', verified: false, avatar: 'https://picsum.photos/id/67/400/500' },
-    { id: '5', name: 'Zoe 🎨', vibe: 'Art Gallery Creative museums', lat: 30, lng: 60, distance: '1.2mi', verified: true, avatar: 'https://picsum.photos/id/102/400/500' },
-  ];
+  const [direction, setDirection] = useState<'left' | 'right' | null>(null);
+  const [filterText, setFilterText] = useState('');
 
   useEffect(() => {
-    const fetchAIScores = async () => {
+    const fetchAndScoreUsers = async () => {
       setIsLoading(true);
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        
+        // 1. Get current location
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        const { latitude, longitude } = pos.coords;
+
+        // 2. Fetch nearby users from Supabase
+        const { data: nearbyUsers, error } = await supabase.rpc('nearby_users', {
+          lat: latitude,
+          lng: longitude,
+          radius_meters: 10000
+        });
+
+        if (error) throw error;
+        if (!nearbyUsers || nearbyUsers.length === 0) {
+          setScoredUsers([]);
+          return;
+        }
+
+        // 3. AI Scoring
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const compatibilityPrompt = `
           Analyze the semantic compatibility between the primary user's vibe and a list of other people's vibes.
           Primary User Vibe: "${userVibe}"
           
           Candidates:
-          ${mockUsers.map(u => `ID: ${u.id}, Vibe: "${u.vibe}"`).join('\n')}
+          ${nearbyUsers.map((u: any) => `ID: ${u.id}, Vibe: "${u.vibe}"`).join('\n')}
           
           Rate each candidate from 0.0 to 1.0 based on how well their interests align with the primary user.
-          High scores (0.8+) for strong semantic matches (e.g., 'Coffee' and 'Late night music' are both social/after-hours).
+          High scores (0.8+) for strong semantic matches.
           Medium scores (0.4-0.7) for related but different interests.
-          Low scores (0.0-0.3) for conflicting or completely unrelated interests.
+          Low scores (0.0-0.3) for unrelated interests.
         `;
 
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
           contents: compatibilityPrompt,
           config: {
-            systemInstruction: "You are a social energy matching AI. You analyze human vibes and interests to find the most compatible people nearby. Be creative but accurate with semantic relationships.",
+            systemInstruction: "You are a social energy matching AI. You analyze human vibes and interests to find the most compatible people nearby.",
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.ARRAY,
@@ -54,7 +70,7 @@ const SwipeScreen: React.FC<SwipeScreenProps> = ({ userVibe, onMatch, isDarkMode
                 type: Type.OBJECT,
                 properties: {
                   id: { type: Type.STRING },
-                  semanticScore: { type: Type.NUMBER, description: "A score from 0.0 to 1.0" }
+                  semanticScore: { type: Type.NUMBER }
                 },
                 required: ["id", "semanticScore"]
               }
@@ -65,57 +81,50 @@ const SwipeScreen: React.FC<SwipeScreenProps> = ({ userVibe, onMatch, isDarkMode
         const aiResults = JSON.parse(response.text || '[]');
         const scoresMap = new Map(aiResults.map((r: any) => [r.id, r.semanticScore]));
 
-        const processed = mockUsers.map(user => {
-          // Explicitly cast or default to number for semanticScore
+        const processed = nearbyUsers.map((user: any) => {
           const semanticScore = Number(scoresMap.get(user.id)) || 0.5;
-          
-          // Proximity Bonus Logic
-          const distValue = parseFloat(user.distance.replace('mi', '')) || 1.0;
-          const proximityBonus = Math.max(0, 0.3 * (1 - distValue / 2)); // 30% weight to proximity
-
-          // Final score is 70% AI semantic match + 30% proximity
-          // Ensure totalScore calculation is robust
+          const distValue = user.distance_meters / 1609.34; // meters to miles
+          const proximityBonus = Math.max(0, 0.3 * (1 - distValue / 5));
           let totalScore = (semanticScore * 0.7) + proximityBonus;
           totalScore = Math.min(0.99, Math.max(0.1, totalScore));
-
           return { ...user, score: totalScore };
-        }).sort((a, b) => (b.score || 0) - (a.score || 0));
+        }).sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
 
         setScoredUsers(processed);
       } catch (error) {
-        console.error("Gemini Vibe Match Error, falling back to basic matching:", error);
-        // Fallback Logic: ensure sort handles optional score property safely
-        const fallback = mockUsers.map(user => ({
-          ...user,
-          score: 0.5 + (Math.random() * 0.4)
-        })).sort((a, b) => (b.score || 0) - (a.score || 0));
-        setScoredUsers(fallback);
+        console.error("Vibe Match Error:", error);
+        setScoredUsers([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchAIScores();
+    fetchAndScoreUsers();
   }, [userVibe]);
 
-  const currentUser = scoredUsers[index];
+  const filteredUsers = scoredUsers.filter(u => 
+    u.vibe.toLowerCase().includes(filterText.toLowerCase())
+  );
+
+  const currentUser = filteredUsers[index];
 
   const handleAction = (isVibe: boolean) => {
-    if (isVibe && (currentUser.score || 0) > 0.65) {
-      setShowMatch(true);
-      setTimeout(() => {
-        setShowMatch(false);
-        onMatch(currentUser);
-      }, 1800);
-    } else {
-      setIndex((prev) => (prev + 1) % scoredUsers.length);
-    }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score > 0.8) return 'text-emerald-400';
-    if (score > 0.5) return 'text-amber-400';
-    return 'text-zinc-400';
+    setDirection(isVibe ? 'right' : 'left');
+    
+    setTimeout(() => {
+      if (isVibe && (currentUser.score || 0) > 0.65) {
+        setShowMatch(true);
+        setTimeout(() => {
+          setShowMatch(false);
+          onMatch(currentUser);
+          setIndex(prev => prev + 1);
+          setDirection(null);
+        }, 1800);
+      } else {
+        setIndex((prev) => prev + 1);
+        setDirection(null);
+      }
+    }, 500);
   };
 
   if (isLoading) {
@@ -135,126 +144,129 @@ const SwipeScreen: React.FC<SwipeScreenProps> = ({ userVibe, onMatch, isDarkMode
     );
   }
 
-  if (!currentUser) {
-    return (
-      <div className={`h-full flex items-center justify-center p-10 text-center transition-colors duration-300 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>
-        <div className="space-y-4">
-          <span className="text-4xl opacity-20">📡</span>
-          <p className="italic font-medium">All vibes explored. Check back soon or widen your search!</p>
-          <button 
-            onClick={() => setIndex(0)}
-            className="text-pink-500 font-black text-xs uppercase tracking-widest border-b border-pink-500 pb-1"
-          >
-            Refresh Feed
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full flex flex-col p-6 items-center justify-center relative animate-in fade-in duration-500 max-w-md mx-auto">
-      {showMatch && (
-        <div className="absolute inset-0 z-[60] bg-emerald-600 flex flex-col items-center justify-center text-white animate-in zoom-in duration-300 rounded-[2.5rem] shadow-[0_0_100px_rgba(16,185,129,0.5)]">
-          <div className="text-7xl mb-6 animate-bounce">💖</div>
-          <h2 className="text-4xl font-black italic tracking-tighter">VIBE SYNC!</h2>
-          <p className="mt-4 font-bold text-emerald-100 uppercase tracking-widest text-sm px-8 text-center">
-            AI detected a perfect frequency match with {currentUser.name}
-          </p>
-          <div className="mt-8 flex -space-x-4">
-            <div className="w-16 h-16 rounded-full border-4 border-white bg-zinc-800 flex items-center justify-center text-2xl shadow-lg">🧑‍🚀</div>
-            <img src={currentUser.avatar} className="w-16 h-16 rounded-full border-4 border-white object-cover shadow-lg" alt="" />
-          </div>
-        </div>
-      )}
-
-      {/* Profile Card */}
-      <div className={`relative w-full aspect-[3/4.2] rounded-[2.5rem] overflow-hidden shadow-2xl border transition-all duration-300 group ${isDarkMode ? 'border-white/10 bg-zinc-900' : 'border-slate-200 bg-white shadow-slate-300/50'}`}>
-        <img src={currentUser.avatar} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[4000ms] ease-out" alt={currentUser.name} />
-        
-        {/* AI Analysis Badge */}
-        <div className="absolute top-6 left-6 z-20">
-          <div className={`backdrop-blur-xl border px-3 py-1.5 rounded-xl flex items-center space-x-2 transition-colors duration-300 shadow-xl ${isDarkMode ? 'bg-black/60 border-white/20' : 'bg-white/80 border-slate-200'}`}>
-            <span className="text-[10px] font-black text-pink-500 animate-pulse">AI MATCH</span>
-          </div>
-        </div>
-
-        {/* Match Percentage Badge */}
-        <div className="absolute top-6 right-6 z-20">
-          <div className={`backdrop-blur-xl border px-4 py-2 rounded-2xl flex flex-col items-center transition-colors duration-300 shadow-xl ${isDarkMode ? 'bg-black/60 border-white/20' : 'bg-white/80 border-slate-200'}`}>
-            <span className={`text-xl font-black leading-none ${getScoreColor(currentUser.score || 0)}`}>
-              {Math.round((currentUser.score || 0) * 100)}%
-            </span>
-            <span className={`text-[8px] font-black uppercase tracking-tighter mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}>Sync</span>
-          </div>
-        </div>
-
-        {/* Content Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none"></div>
-        
-        <div className="absolute bottom-0 left-0 right-0 p-8 pt-20">
-          <div className="flex items-center space-x-2">
-            <h3 className="text-3xl font-black text-white italic tracking-tight">{currentUser.name}</h3>
-            {currentUser.verified && (
-              <div className="bg-pink-500 text-white rounded-full p-1 shadow-lg">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              </div>
-            )}
-          </div>
-          
-          <p className="text-zinc-300 text-sm mt-2 font-medium line-clamp-2 leading-tight italic">
-            "{currentUser.vibe}"
-          </p>
-
-          <div className="flex items-center justify-between mt-6">
-            <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
-              <span className="text-pink-400">📍</span>
-              <span className="text-xs font-black text-white uppercase tracking-widest">{currentUser.distance} away</span>
-            </div>
-            
-            <div className="flex items-center space-x-1">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div 
-                  key={i} 
-                  className={`w-1.5 h-1.5 rounded-full ${i < Math.floor((currentUser.score || 0) * 5) ? 'bg-pink-500 shadow-[0_0_5px_#EC4899]' : 'bg-white/20'}`}
-                ></div>
-              ))}
-            </div>
-          </div>
+    <div className="h-full flex flex-col p-6 items-center justify-center relative animate-in fade-in duration-500 max-w-md mx-auto overflow-hidden">
+      
+      {/* Filter Bar */}
+      <div className="absolute top-6 left-6 right-6 z-50">
+        <div className={`flex items-center space-x-2 px-4 py-3 rounded-2xl border backdrop-blur-xl shadow-lg transition-colors ${isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-white/80 border-slate-200 text-slate-900'}`}>
+          <Filter size={16} className={isDarkMode ? 'text-zinc-400' : 'text-slate-400'} />
+          <input 
+            type="text" 
+            placeholder="Filter vibes (e.g., coffee, music)..." 
+            value={filterText}
+            onChange={(e) => {
+              setFilterText(e.target.value);
+              setIndex(0); // Reset index when filter changes
+            }}
+            className="bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-500"
+          />
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex space-x-8 mt-10 items-center">
-        <button 
-          onClick={() => handleAction(false)}
-          className={`w-16 h-16 rounded-full border flex items-center justify-center text-2xl transition-all shadow-lg active:scale-90 group ${isDarkMode ? 'bg-zinc-800 border-white/10 text-white hover:bg-zinc-700 hover:border-white/20' : 'bg-white border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200'}`}
-        >
-          <span className="group-hover:rotate-12 transition-transform">✕</span>
-        </button>
-        
-        <div className="relative">
-          <div className="absolute inset-0 bg-pink-500/20 blur-2xl rounded-full animate-pulse"></div>
+      {!currentUser ? (
+        <div className={`flex flex-col items-center justify-center p-10 text-center transition-colors duration-300 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>
+          <div className="w-20 h-20 bg-pink-500/10 rounded-full flex items-center justify-center mb-6">
+            <Sparkles className="text-pink-500" size={32} />
+          </div>
+          <h2 className="text-xl font-black italic mb-2">All vibes explored!</h2>
+          <p className="text-sm max-w-[240px] mb-8">
+            {filterText ? `No more vibes matching "${filterText}". Try clearing your filter.` : 'Check back soon or broaden your horizons to find more vibes nearby.'}
+          </p>
           <button 
-            onClick={() => handleAction(true)}
-            className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 via-purple-500 to-amber-500 shadow-2xl shadow-pink-500/40 flex flex-col items-center justify-center relative hover:scale-110 active:scale-95 transition-all text-white border-2 border-white/20"
+            onClick={() => {
+              setIndex(0);
+              setFilterText('');
+            }}
+            className="bg-pink-600 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-white shadow-xl shadow-pink-500/20 active:scale-95"
           >
-            <span className="text-4xl mb-1">💖</span>
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] leading-none">Vibe Sync</span>
+            {filterText ? 'CLEAR FILTER' : 'REFRESH FEED'}
           </button>
         </div>
+      ) : (
+        <>
+          {showMatch && (
+            <div className="fixed inset-0 z-[100] bg-emerald-600 flex flex-col items-center justify-center text-white animate-in zoom-in duration-300">
+              <div className="text-7xl mb-6 animate-bounce">💖</div>
+              <h2 className="text-4xl font-black italic tracking-tighter">VIBE SYNC!</h2>
+              <p className="mt-4 font-bold text-emerald-100 uppercase tracking-widest text-sm px-8 text-center">
+                AI detected a perfect frequency match with {currentUser.name}
+              </p>
+            </div>
+          )}
 
-        <button 
-          className={`w-16 h-16 rounded-full border flex items-center justify-center text-2xl transition-all shadow-lg active:scale-90 ${isDarkMode ? 'bg-zinc-800 border-white/10 text-white hover:bg-zinc-700' : 'bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-amber-200'}`}
-        >
-          <span>⚡</span>
-        </button>
-      </div>
-      
-      <p className="mt-8 text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] flex items-center gap-2">
-        <span className="w-1 h-1 bg-pink-500 rounded-full animate-ping"></span>
-        AI optimizing local connections
-      </p>
+          <div className={`relative w-full aspect-[3/4.2] rounded-[3rem] overflow-hidden shadow-2xl border transition-all duration-500 transform mt-12 ${
+            direction === 'left' ? '-translate-x-[150%] rotate-[-20deg] opacity-0' : 
+            direction === 'right' ? 'translate-x-[150%] rotate-[20deg] opacity-0' : 
+            'translate-x-0 rotate-0 opacity-100'
+          } ${isDarkMode ? 'border-white/10 bg-zinc-900' : 'border-slate-200 bg-white'}`}>
+            <img src={currentUser.avatar_url || `https://picsum.photos/seed/${currentUser.id}/600/800`} className="w-full h-full object-cover" alt={currentUser.name} />
+            
+            <div className="absolute top-6 left-6 z-20">
+              <div className={`backdrop-blur-xl border px-3 py-1.5 rounded-xl flex items-center space-x-2 shadow-xl ${isDarkMode ? 'bg-black/60 border-white/20' : 'bg-white/80 border-slate-200'}`}>
+                <span className="text-[10px] font-black text-pink-500 animate-pulse uppercase tracking-widest">AI Match</span>
+              </div>
+            </div>
+
+            <div className="absolute top-6 right-6 z-20">
+              <div className={`backdrop-blur-xl border px-4 py-2 rounded-2xl flex flex-col items-center shadow-xl ${isDarkMode ? 'bg-black/60 border-white/20' : 'bg-white/80 border-slate-200'}`}>
+                <span className={`text-xl font-black leading-none ${currentUser.score && currentUser.score > 0.8 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {Math.round((currentUser.score || 0) * 100)}%
+                </span>
+                <span className="text-[8px] font-black uppercase tracking-tighter mt-1 opacity-60">Sync</span>
+              </div>
+            </div>
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"></div>
+            
+            <div className="absolute bottom-0 left-0 right-0 p-8">
+              <h3 className="text-3xl font-black text-white italic tracking-tight">{currentUser.name}</h3>
+              <p className="text-pink-400 font-black text-xs uppercase tracking-[0.2em] mt-2 mb-4">{currentUser.vibe}</p>
+              
+              <div className="flex items-center space-x-3">
+                <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center space-x-2">
+                  <MapPin className="text-pink-400" size={14} />
+                  <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                    {Math.round(currentUser.distance_meters || 0)}m away
+                  </span>
+                </div>
+                <button 
+                  onClick={() => onViewProfile && onViewProfile(currentUser.id)}
+                  className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center space-x-2 hover:bg-white/20 transition-colors"
+                >
+                  <User className="text-white" size={14} />
+                  <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                    Profile
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex space-x-8 mt-10 items-center">
+            <button 
+              onClick={() => handleAction(false)}
+              className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all shadow-lg active:scale-90 ${isDarkMode ? 'bg-zinc-800 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-400'}`}
+            >
+              <X size={28} />
+            </button>
+            
+            <button 
+              onClick={() => handleAction(true)}
+              className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 via-purple-500 to-amber-500 shadow-2xl shadow-pink-500/40 flex flex-col items-center justify-center hover:scale-110 active:scale-95 transition-all text-white border-2 border-white/20"
+            >
+              <Heart size={32} fill="currentColor" />
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] mt-1">Vibe Sync</span>
+            </button>
+
+            <button 
+              className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all shadow-lg active:scale-90 ${isDarkMode ? 'bg-zinc-800 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-400'}`}
+            >
+              <Star size={24} fill="currentColor" className="text-amber-500" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -203,7 +203,7 @@ const App: React.FC = () => {
       case TabType.PROFILE: 
         return <ProfileScreen userVibe={userVibe} onUpdateVibe={setUserVibe} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />;
       case TabType.CHAT:
-        return <ChatScreen user={selectedChatUser} isDarkMode={isDarkMode} />;
+        return <ChatScreen user={selectedChatUser} isDarkMode={isDarkMode} onSelectUser={setSelectedChatUser} />;
       default: 
         return <SwipeScreen userVibe={userVibe} onMatch={handleStartChat} isDarkMode={isDarkMode} onViewProfile={handleViewProfile} />;
     }

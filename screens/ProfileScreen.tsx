@@ -16,6 +16,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userVibe, onUpdateVibe, i
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [discoverable, setDiscoverable] = useState(true);
+  const [profilePrivacy, setProfilePrivacy] = useState<'everyone' | 'private'>('everyone');
+  const [storyPrivacy, setStoryPrivacy] = useState<'everyone' | 'private'>('everyone');
+  const [chatPrivacy, setChatPrivacy] = useState<'everyone' | 'private'>('everyone');
 
   useEffect(() => {
     fetchProfile();
@@ -23,26 +26,44 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userVibe, onUpdateVibe, i
 
   const fetchProfile = async () => {
     setLoading(true);
+    try {
+      if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      setUser(user);
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      if (profile) {
-        setName(profile.name || 'Vicinity Voyager');
-        onUpdateVibe(profile.vibe || 'Chilling in the city 🌃');
-        setDiscoverable(profile.discoverable !== false);
+      if (user) {
+        setUser(user);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          setName(profile.name || 'Vicinity Voyager');
+          onUpdateVibe(profile.vibe || 'Chilling in the city 🌃');
+          setDiscoverable(profile.discoverable !== false);
+          setProfilePrivacy(profile.profile_privacy || 'everyone');
+          setStoryPrivacy(profile.story_privacy || 'everyone');
+          setChatPrivacy(profile.chat_privacy || 'everyone');
+        }
+      } else {
+        // Mock profile for bypass
+        setName('Demo User');
+        onUpdateVibe('Prototyping 🚀');
       }
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      setName('Demo User');
+      onUpdateVibe('Prototyping 🚀');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsEditing(false);
+      return;
+    }
     
     const { error } = await supabase
       .from('profiles')
@@ -50,6 +71,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userVibe, onUpdateVibe, i
         name,
         vibe: userVibe,
         discoverable,
+        profile_privacy: profilePrivacy,
+        story_privacy: storyPrivacy,
+        chat_privacy: chatPrivacy,
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id);
@@ -73,6 +97,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userVibe, onUpdateVibe, i
   };
 
   const handleSignOut = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     window.location.reload();
   };
@@ -80,119 +105,165 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ userVibe, onUpdateVibe, i
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-pink-500 border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#e879f9] border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-y-auto h-full scrollbar-hide">
-      {/* Profile Header Card */}
-      <div className={`p-8 rounded-[2.5rem] border text-center relative overflow-hidden transition-all duration-300 ${isDarkMode ? 'bg-[#1E1B4B] border-white/10 shadow-2xl' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50'}`}>
-        <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-amber-500/20 blur-2xl"></div>
-        
-        <div className="relative inline-block group">
-          <div className="w-28 h-28 rounded-full bg-gradient-to-br from-amber-400 via-pink-500 to-violet-600 p-1.5 shadow-lg group-hover:scale-105 transition-transform">
-            <div className={`w-full h-full rounded-full flex items-center justify-center text-5xl overflow-hidden ${isDarkMode ? 'bg-zinc-900' : 'bg-white'}`}>
-              <img src={user?.user_metadata?.avatar_url || 'https://picsum.photos/id/64/120/120'} className="w-full h-full object-cover" alt="" />
-            </div>
-          </div>
-          <div className={`absolute bottom-1 right-1 bg-green-500 w-7 h-7 rounded-full border-4 ${isDarkMode ? 'border-[#1E1B4B]' : 'border-white'} shadow-md`}></div>
+    <div className="h-full flex flex-col p-5 animate-in fade-in duration-500 overflow-y-auto pb-24">
+      <div className="mb-5">
+        <div className="font-['Syne',sans-serif] text-[22px] font-[800] tracking-[-0.5px] mb-1">
+          <span className={isDarkMode ? 'text-white' : 'text-slate-900'}>Your </span>
+          <span className="text-[#e879f9]">Profile</span>
         </div>
+        <div className="text-[12px] font-['DM_Sans',sans-serif] text-white/40 mb-5">
+          Manage your vibe and settings
+        </div>
+      </div>
 
-        <div className="mt-6 space-y-1">
+      <div className="flex flex-col gap-[14px]">
+        {/* Profile Card */}
+        <div className="p-[20px] rounded-[20px] bg-white/5 backdrop-blur-[16px] border border-white/10 flex flex-col items-center text-center">
+          <div className="relative mb-4">
+            <div 
+              className="w-20 h-20 rounded-full flex items-center justify-center font-['Syne',sans-serif] font-[700] text-[24px] text-white shadow-[0_0_20px_rgba(232,121,249,0.4)]"
+              style={{
+                background: `linear-gradient(135deg, #e879f988, #e879f944)`,
+                border: `2px solid #e879f9`
+              }}
+            >
+              {name.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#22c55e] border-[3px] border-[#0d0a1e]" />
+          </div>
+          
           {isEditing ? (
             <input 
               type="text" 
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className={`text-2xl font-black italic text-center w-full bg-transparent border-b-2 border-pink-500 outline-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
+              className="font-['Syne',sans-serif] font-[800] text-[20px] text-white bg-transparent border-b border-[#e879f9] outline-none text-center mb-1"
               autoFocus
             />
           ) : (
-            <h2 className={`text-2xl font-black italic ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{name}</h2>
+            <div className="font-['Syne',sans-serif] font-[800] text-[20px] text-white mb-1">
+              {name}
+            </div>
           )}
-          <p className={`${isDarkMode ? 'text-zinc-500' : 'text-slate-400'} text-xs font-bold uppercase tracking-[0.2em]`}>Verified Vibe Master</p>
-        </div>
-
-        <button 
-          onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-          className={`mt-6 px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all ${isDarkMode ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-        >
-          {isEditing ? '💾 Save Profile' : '✏️ Edit Profile'}
-        </button>
-      </div>
-
-      {/* Vibe & Theme Section */}
-      <div className="space-y-4">
-        <div className={`${isDarkMode ? 'bg-zinc-800/50 border-white/5' : 'bg-white border-slate-200 shadow-sm'} p-6 rounded-3xl border`}>
-          <h3 className="text-xs font-black uppercase text-pink-500 tracking-widest mb-4">Current Vicinity Vibe</h3>
-          <input 
-            type="text" 
-            value={userVibe}
-            onChange={(e) => onUpdateVibe(e.target.value)}
-            placeholder="Ex: Chill Coffee, 90s Vinyl, Park Jog..." 
-            className={`w-full border rounded-xl px-4 py-3 outline-none focus:border-pink-500 text-sm font-medium transition-colors ${isDarkMode ? 'bg-black/30 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
-          />
-          <p className="text-[10px] text-zinc-500 mt-2 font-medium italic">"Your vibe is visible to anyone within 10km."</p>
-        </div>
-
-        <div className={`${isDarkMode ? 'bg-zinc-800/50 border-white/5' : 'bg-white border-slate-200 shadow-sm'} p-6 rounded-3xl border flex items-center justify-between`}>
-          <div className="flex items-center space-x-3">
-            <Shield className="text-emerald-500" size={20} />
-            <div>
-              <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Discoverable</h3>
-              <p className="text-[10px] text-zinc-500">Show my profile to nearby users</p>
-            </div>
+          <div className="text-[13px] text-[#e879f9] font-['DM_Sans',sans-serif] mb-4">
+            {userVibe}
           </div>
+          
           <button 
-            onClick={toggleDiscoverable}
-            className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none ${discoverable ? 'bg-emerald-500' : 'bg-slate-300'}`}
+            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+            className="px-6 py-[8px] rounded-[50px] bg-white/10 border border-white/20 text-white font-['DM_Sans',sans-serif] font-[600] text-[12px] cursor-pointer hover:bg-white/20 transition-colors"
           >
-            <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform duration-300 shadow-sm ${discoverable ? 'translate-x-7' : 'translate-x-0'}`}></div>
+            {isEditing ? 'Save Profile' : 'Edit Profile'}
           </button>
         </div>
 
-        <div className={`${isDarkMode ? 'bg-zinc-800/50 border-white/5' : 'bg-white border-slate-200 shadow-sm'} p-6 rounded-3xl border flex items-center justify-between`}>
-          <div className="flex items-center space-x-3">
-            <Settings className="text-pink-500" size={20} />
-            <div>
-              <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Dark Mode</h3>
-              <p className="text-[10px] text-zinc-500">Save battery & look mysterious</p>
-            </div>
+        {/* Settings */}
+        <div className="p-[20px] rounded-[20px] bg-white/5 backdrop-blur-[16px] border border-white/10 flex flex-col gap-5">
+          <div className="font-['Syne',sans-serif] font-[700] text-[15px] text-white mb-1">
+            Settings
           </div>
-          <button 
-            onClick={onToggleTheme}
-            className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none ${isDarkMode ? 'bg-pink-600' : 'bg-slate-300'}`}
-          >
-            <div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform duration-300 shadow-sm flex items-center justify-center overflow-hidden ${isDarkMode ? 'translate-x-7' : 'translate-x-0'}`}>
-               {isDarkMode ? <span className="text-[10px]">🌙</span> : <span className="text-[10px]">☀️</span>}
+          
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-['DM_Sans',sans-serif] font-[600] text-[14px] text-white">Discoverable</div>
+              <div className="font-['DM_Sans',sans-serif] text-[11px] text-white/40 mt-1">Show my profile to nearby users</div>
             </div>
-          </button>
-        </div>
-      </div>
+            <button 
+              onClick={toggleDiscoverable}
+              className="w-12 h-6 rounded-full relative transition-colors duration-300"
+              style={{ background: discoverable ? '#22c55e' : 'rgba(255,255,255,0.2)' }}
+            >
+              <div 
+                className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform duration-300"
+                style={{ transform: discoverable ? 'translateX(24px)' : 'translateX(0)' }}
+              />
+            </button>
+          </div>
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className={`${isDarkMode ? 'bg-zinc-800/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'} p-5 rounded-2xl border text-center group hover:border-pink-500/50 transition-colors`}>
-           <Award className="text-pink-500 mx-auto mb-2" size={24} />
-           <div className="text-2xl font-black text-pink-500">24</div>
-           <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>Vibe Syncs</div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-['DM_Sans',sans-serif] font-[600] text-[14px] text-white">Dark Mode</div>
+              <div className="font-['DM_Sans',sans-serif] text-[11px] text-white/40 mt-1">Toggle app theme</div>
+            </div>
+            <button 
+              onClick={onToggleTheme}
+              className="w-12 h-6 rounded-full relative transition-colors duration-300"
+              style={{ background: isDarkMode ? '#e879f9' : 'rgba(255,255,255,0.2)' }}
+            >
+              <div 
+                className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform duration-300 flex items-center justify-center"
+                style={{ transform: isDarkMode ? 'translateX(24px)' : 'translateX(0)' }}
+              >
+                <span className="text-[8px]">{isDarkMode ? '🌙' : '☀️'}</span>
+              </div>
+            </button>
+          </div>
         </div>
-        <div className={`${isDarkMode ? 'bg-zinc-800/30 border-white/5' : 'bg-white border-slate-200 shadow-sm'} p-5 rounded-2xl border text-center group hover:border-amber-500/50 transition-colors`}>
-           <Zap className="text-amber-500 mx-auto mb-2" size={24} />
-           <div className="text-2xl font-black text-amber-500">482</div>
-           <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>Vicinity Reach</div>
+
+        {/* Privacy */}
+        <div className="p-[20px] rounded-[20px] bg-white/5 backdrop-blur-[16px] border border-white/10 flex flex-col gap-5">
+          <div className="font-['Syne',sans-serif] font-[700] text-[15px] text-white mb-1">
+            Privacy
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-['DM_Sans',sans-serif] font-[600] text-[14px] text-white">Profile Details</div>
+              <div className="font-['DM_Sans',sans-serif] text-[11px] text-white/40 mt-1">Who can see your bio</div>
+            </div>
+            <select 
+              value={profilePrivacy}
+              onChange={(e) => setProfilePrivacy(e.target.value as any)}
+              className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-[12px] text-white font-['DM_Sans',sans-serif] outline-none"
+            >
+              <option value="everyone">Everyone</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-['DM_Sans',sans-serif] font-[600] text-[14px] text-white">Stories</div>
+              <div className="font-['DM_Sans',sans-serif] text-[11px] text-white/40 mt-1">Who can view your posts</div>
+            </div>
+            <select 
+              value={storyPrivacy}
+              onChange={(e) => setStoryPrivacy(e.target.value as any)}
+              className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-[12px] text-white font-['DM_Sans',sans-serif] outline-none"
+            >
+              <option value="everyone">Everyone</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-['DM_Sans',sans-serif] font-[600] text-[14px] text-white">Direct Chat</div>
+              <div className="font-['DM_Sans',sans-serif] text-[11px] text-white/40 mt-1">Who can initiate a chat</div>
+            </div>
+            <select 
+              value={chatPrivacy}
+              onChange={(e) => setChatPrivacy(e.target.value as any)}
+              className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-[12px] text-white font-['DM_Sans',sans-serif] outline-none"
+            >
+              <option value="everyone">Everyone</option>
+              <option value="private">None</option>
+            </select>
+          </div>
         </div>
-      </div>
-      
-      <div className="text-center pb-8">
+
         <button 
           onClick={handleSignOut}
-          className="flex items-center justify-center space-x-2 w-full py-4 text-xs font-black text-red-500/70 hover:text-red-500 transition-colors uppercase tracking-widest border border-red-500/20 rounded-2xl"
+          className="mt-2 p-[14px] rounded-[16px] border border-red-500/30 bg-red-500/10 text-red-400 font-['Syne',sans-serif] font-[700] text-[14px] cursor-pointer hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2"
         >
           <LogOut size={16} />
-          <span>Sign Out of Vicinity</span>
+          Sign Out
         </button>
       </div>
     </div>

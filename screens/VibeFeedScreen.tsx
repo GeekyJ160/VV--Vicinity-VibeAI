@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Story, VibeUser } from '../types';
 import { supabase } from '../supabaseClient';
-import { MapPin, MessageCircle, Heart, Share2, Sparkles, Clock } from 'lucide-react';
+import { MapPin, MessageCircle, Heart, Share2, Sparkles, Clock, Filter } from 'lucide-react';
 
 interface VibeFeedScreenProps {
   isDarkMode: boolean;
@@ -16,6 +16,8 @@ type FeedItem =
 const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfile }) => {
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterText, setFilterText] = useState('');
+  const [sortBy, setSortBy] = useState<'recency' | 'proximity'>('recency');
 
   useEffect(() => {
     fetchFeed();
@@ -23,22 +25,29 @@ const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfi
 
   const fetchFeed = async () => {
     setLoading(true);
-    navigator.geolocation.getCurrentPosition(async (pos) => {
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
       const { latitude, longitude } = pos.coords;
 
       // Fetch stories
-      const { data: storyData } = await supabase.rpc('nearby_stories', {
+      if (!supabase) return;
+      const { data: storyData, error: storyError } = await supabase.rpc('nearby_stories', {
         lat: latitude,
         lng: longitude,
         radius_meters: 10000
       });
 
       // Fetch nearby users
-      const { data: vibeData } = await supabase.rpc('nearby_users', {
+      if (!supabase) return;
+      const { data: vibeData, error: vibeError } = await supabase.rpc('nearby_users', {
         lat: latitude,
         lng: longitude,
         radius_meters: 10000
       });
+
+      if (storyError || vibeError) throw new Error('Failed to fetch feed data');
 
       const items: FeedItem[] = [];
       
@@ -47,16 +56,59 @@ const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfi
       }
       
       if (storyData) {
-        storyData.forEach((s: Story) => items.push({ type: 'story', data: s, id: `story-${s.id}` }));
+        storyData
+          .filter((s: any) => s.story_privacy !== 'private')
+          .forEach((s: Story) => items.push({ type: 'story', data: s, id: `story-${s.id}` }));
       }
 
-      // Shuffle or sort items (here we just interleave them roughly)
-      items.sort(() => Math.random() - 0.5);
-
       setFeedItems(items);
+    } catch (err) {
+      console.error("Error fetching feed:", err);
+      // Fallback to mock data for prototyping
+      setFeedItems([
+        { type: 'vibe', id: 'vibe-m1', data: { id: 'm1', name: 'Alex', vibe: 'Coffee & Code', avatar_url: 'https://picsum.photos/seed/alex/100/100', distance_meters: 1200, profile_privacy: 'everyone', chat_privacy: 'everyone', story_privacy: 'everyone', lat: 0, lng: 0 } },
+        { type: 'story', id: 'story-s1', data: { id: 's1', user_id: 'm2', name: 'Sam', vibe: 'Live Music', image_url: 'https://picsum.photos/seed/sam/400/600', caption: 'Soundcheck 🎸', created_at: new Date(Date.now() - 3600000).toISOString(), distance_meters: 800, avatar_url: 'https://picsum.photos/seed/sam/100/100', story_privacy: 'everyone', lat: 0, lng: 0 } }
+      ]);
+    } finally {
       setLoading(false);
-    });
+    }
   };
+
+  const filteredAndSortedItems = useMemo(() => {
+    let result = [...feedItems];
+
+    // Filter
+    if (filterText.trim()) {
+      const lowerFilter = filterText.toLowerCase();
+      result = result.filter(item => {
+        if (item.type === 'vibe') {
+          return item.data.name.toLowerCase().includes(lowerFilter) || 
+                 item.data.vibe.toLowerCase().includes(lowerFilter);
+        } else {
+          return item.data.name.toLowerCase().includes(lowerFilter) || 
+                 item.data.caption?.toLowerCase().includes(lowerFilter) ||
+                 item.data.vibe?.toLowerCase().includes(lowerFilter);
+        }
+      });
+    }
+
+    // Sort
+    if (sortBy === 'recency') {
+      result.sort((a, b) => {
+        const timeA = a.type === 'story' ? new Date(a.data.created_at).getTime() : new Date(a.data.updated_at || 0).getTime();
+        const timeB = b.type === 'story' ? new Date(b.data.created_at).getTime() : new Date(b.data.updated_at || 0).getTime();
+        return timeB - timeA;
+      });
+    } else {
+      result.sort((a, b) => {
+        const distA = a.data.distance_meters || 0;
+        const distB = b.data.distance_meters || 0;
+        return distA - distB;
+      });
+    }
+
+    return result;
+  }, [feedItems, filterText, sortBy]);
 
   if (loading) {
     return (
@@ -78,9 +130,15 @@ const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfi
           className="flex items-center space-x-4 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => onViewProfile && onViewProfile(v.id)}
         >
-          <img src={v.avatar_url || `https://picsum.photos/seed/${v.id}/80/80`} className="w-12 h-12 rounded-full border-2 border-pink-500" alt="" />
+          <img 
+            src={v.profile_privacy === 'private' ? `https://picsum.photos/seed/private/80/80?blur=10` : (v.avatar_url || `https://picsum.photos/seed/${v.id}/80/80`)} 
+            className="w-12 h-12 rounded-full border-2 border-pink-500 object-cover" 
+            alt="" 
+          />
           <div>
-            <h3 className={`font-black text-base italic leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{v.name}</h3>
+            <h3 className={`font-black text-base italic leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              {v.profile_privacy === 'private' ? "Private User" : v.name}
+            </h3>
             <div className="flex items-center space-x-2 mt-1.5">
               <MapPin className="text-pink-500" size={10} />
               <span className="text-[9px] font-black text-pink-500 uppercase tracking-widest">{Math.round(v.distance_meters || 0)}m away</span>
@@ -93,7 +151,7 @@ const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfi
       </div>
 
       <div className={`p-4 rounded-2xl mb-6 italic text-sm ${isDarkMode ? 'bg-white/5 text-zinc-300' : 'bg-slate-50 text-slate-600'}`}>
-        "{v.vibe}"
+        {v.profile_privacy === 'private' ? '"Vibe is hidden"' : `"${v.vibe}"`}
       </div>
 
       <div className="flex items-center justify-between">
@@ -102,13 +160,15 @@ const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfi
             <Heart size={18} />
             <span className="text-[10px] font-black">24</span>
           </button>
-          <button 
-            onClick={() => onViewProfile && onViewProfile(v.id)}
-            className={`flex items-center space-x-2 transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-pink-500' : 'text-slate-400 hover:text-pink-500'}`}
-          >
-            <MessageCircle size={18} />
-            <span className="text-[10px] font-black">8</span>
-          </button>
+          {v.chat_privacy !== 'private' && (
+            <button 
+              onClick={() => onViewProfile && onViewProfile(v.id)}
+              className={`flex items-center space-x-2 transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-pink-500' : 'text-slate-400 hover:text-pink-500'}`}
+            >
+              <MessageCircle size={18} />
+              <span className="text-[10px] font-black">8</span>
+            </button>
+          )}
         </div>
         <button className={`p-2 rounded-full transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-slate-400 hover:text-slate-800'}`}>
           <Share2 size={18} />
@@ -185,14 +245,55 @@ const VibeFeedScreen: React.FC<VibeFeedScreenProps> = ({ isDarkMode, onViewProfi
           <h2 className={`text-lg font-black italic tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Vicinity Feed</h2>
           <Sparkles className="text-pink-500" size={16} />
         </div>
+
+        {/* Filter & Sort Bar */}
+        <div className="flex flex-col space-y-3">
+          <div className={`flex items-center space-x-2 px-4 py-2 rounded-2xl border backdrop-blur-xl transition-colors ${isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <Filter size={16} className={isDarkMode ? 'text-zinc-400' : 'text-slate-400'} />
+            <input 
+              type="text" 
+              placeholder="Filter feed by vibe..." 
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              className="bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-500"
+            />
+          </div>
+          
+          <div className="flex space-x-2">
+            <button 
+              onClick={() => setSortBy('recency')}
+              className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                sortBy === 'recency' 
+                  ? 'bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-500/20' 
+                  : isDarkMode ? 'bg-white/5 border-white/10 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'
+              }`}
+            >
+              <Clock size={12} />
+              <span>Recent</span>
+            </button>
+            <button 
+              onClick={() => setSortBy('proximity')}
+              className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                sortBy === 'proximity' 
+                  ? 'bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-500/20' 
+                  : isDarkMode ? 'bg-white/5 border-white/10 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'
+              }`}
+            >
+              <MapPin size={12} />
+              <span>Nearby</span>
+            </button>
+          </div>
+        </div>
         
-        {feedItems.map((item) => 
+        {filteredAndSortedItems.map((item) => 
           item.type === 'vibe' ? renderVibeCard(item.data) : renderStoryCard(item.data)
         )}
         
-        {feedItems.length === 0 && (
+        {filteredAndSortedItems.length === 0 && (
           <div className="text-center py-20">
-            <p className="text-zinc-500 text-sm italic">No vibes or stories nearby yet. Be the first to broadcast!</p>
+            <p className="text-zinc-500 text-sm italic">
+              {filterText ? `No results matching "${filterText}"` : 'No vibes or stories nearby yet. Be the first to broadcast!'}
+            </p>
           </div>
         )}
       </section>

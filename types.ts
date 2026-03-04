@@ -8,6 +8,9 @@ export interface VibeUser {
   lng: number;
   distance_meters?: number;
   discoverable?: boolean;
+  profile_privacy?: 'everyone' | 'private';
+  story_privacy?: 'everyone' | 'private';
+  chat_privacy?: 'everyone' | 'private';
   updated_at?: string;
 }
 
@@ -15,6 +18,7 @@ export interface Story {
   id: string;
   user_id: string;
   name: string;
+  vibe?: string;
   image_url: string;
   caption?: string;
   lat: number;
@@ -40,6 +44,19 @@ export interface Promo {
   lat: number;
   lng: number;
   active: boolean;
+}
+
+export interface MapEvent {
+  id: string;
+  title: string;
+  description: string;
+  lat: number;
+  lng: number;
+  start_time: string;
+  end_time: string;
+  type: 'music' | 'food' | 'art' | 'party' | 'other';
+  image_url?: string;
+  distance_meters?: number;
 }
 
 export enum TabType {

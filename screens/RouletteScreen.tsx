@@ -6,94 +6,117 @@ interface RouletteScreenProps {
   isDarkMode: boolean;
 }
 
+const SPIN_CATEGORIES = ["Coffee", "Music", "Nature", "Art", "Food", "Sport"];
+const SPIN_COLORS = ["#f97316", "#8b5cf6", "#22c55e", "#f43f5e", "#ec4899", "#3b82f6"];
+
 const RouletteScreen: React.FC<RouletteScreenProps> = ({ onAction, isDarkMode }) => {
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [spinning, setSpinning] = useState(false);
+  const [spinAngle, setSpinAngle] = useState(0);
+  const [spinResult, setSpinResult] = useState<string | null>(null);
 
-  const options = [
-    'Nightlife @BarVV', 
-    'Live Music nearby', 
-    'Trivia Night', 
-    'Food Trucks', 
-    'Park Hangout', 
-    'Arcade Games', 
-    'Yoga Flow', 
-    'Coffee & Chat'
-  ];
-
-  const handleSpin = () => {
-    if (isSpinning) return;
-    setIsSpinning(true);
-    setResult(null);
+  const spinWheel = () => {
+    if (spinning) return;
+    setSpinning(true);
+    setSpinResult(null);
+    
+    const extra = Math.floor(Math.random() * 360) + 1080;
+    const newAngle = spinAngle + extra;
+    setSpinAngle(newAngle);
     
     setTimeout(() => {
-      setIsSpinning(false);
-      const win = options[Math.floor(Math.random() * options.length)];
-      setResult(win);
+      const idx = Math.floor(Math.random() * SPIN_CATEGORIES.length);
+      setSpinResult(SPIN_CATEGORIES[idx]);
+      setSpinning(false);
     }, 2000);
   };
 
+  const segAngle = 360 / SPIN_CATEGORIES.length;
+
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-8 animate-in fade-in duration-500">
-      <div className="space-y-2">
-        <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-amber-500">
-          BOREDOM ROULETTE
-        </h2>
-        <p className={`${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}>Can't decide? Let the Vibe find you.</p>
+    <div className="h-full flex flex-col p-6 animate-in fade-in duration-500 overflow-y-auto">
+      <div className="mb-4">
+        <div className="font-['Syne',sans-serif] text-[22px] font-[800] tracking-[-0.5px] mb-1">
+          <span className="text-[#e879f9]">Roulette</span>
+        </div>
+        <div className="text-[12px] font-['DM_Sans',sans-serif] text-white/40 mb-5">
+          Can't decide? Let the Vibe find you.
+        </div>
       </div>
 
-      <div className="relative">
-        <div 
-          className={`w-64 h-64 rounded-full border-8 shadow-[0_0_50px_rgba(236,72,153,0.3)] relative overflow-hidden transition-all duration-[2000ms] ease-out ${isSpinning ? 'rotate-[1440deg]' : ''} ${isDarkMode ? 'border-[#1E1B4B]' : 'border-white'}`}
-          style={{
-            background: `conic-gradient(
-              #EC4899 0deg 45deg, 
-              #F59E0B 45deg 90deg, 
-              #8B5CF6 90deg 135deg, 
-              #10B981 135deg 180deg, 
-              #EF4444 180deg 225deg, 
-              #3B82F6 225deg 270deg, 
-              #F97316 270deg 315deg, 
-              #8B5CF6 315deg 360deg
-            )`
-          }}
-        >
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border-4 flex items-center justify-center font-bold text-xs ${isDarkMode ? 'bg-[#1E1B4B] border-white text-white' : 'bg-white border-slate-100 text-slate-800 shadow-md'}`}>
-            VV
-          </div>
+      <div className="flex flex-col items-center justify-center flex-1">
+        <div className="font-['Syne',sans-serif] text-[13px] font-[700] text-white/50 mb-[14px] tracking-[0.08em] uppercase">
+          CAN'T DECIDE? SPIN IT
         </div>
-        {/* Pointer */}
-        <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[30px] ${isDarkMode ? 'border-t-white' : 'border-t-slate-800'}`}></div>
+        
+        <div className="p-5 flex flex-col items-center gap-4 bg-white/5 backdrop-blur-[16px] border border-white/10 rounded-[20px] w-full max-w-[300px]">
+          <div className="relative w-[160px] h-[160px]">
+            {/* Pointer */}
+            <div className="absolute top-[-8px] left-1/2 -translate-x-1/2 z-10 text-[18px] text-white">
+              ▼
+            </div>
+            
+            <svg 
+              width="160" 
+              height="160" 
+              viewBox="0 0 160 160"
+              style={{ 
+                transform: `rotate(${spinAngle}deg)`, 
+                transition: spinning ? "transform 2s cubic-bezier(0.17,0.67,0.12,0.99)" : "none" 
+              }}
+            >
+              {SPIN_CATEGORIES.map((cat, i) => {
+                const startAngle = (i * segAngle - 90) * Math.PI / 180;
+                const endAngle = ((i + 1) * segAngle - 90) * Math.PI / 180;
+                const x1 = 80 + 70 * Math.cos(startAngle);
+                const y1 = 80 + 70 * Math.sin(startAngle);
+                const x2 = 80 + 70 * Math.cos(endAngle);
+                const y2 = 80 + 70 * Math.sin(endAngle);
+                const midAngle = ((i + 0.5) * segAngle - 90) * Math.PI / 180;
+                const tx = 80 + 46 * Math.cos(midAngle);
+                const ty = 80 + 46 * Math.sin(midAngle);
+                
+                return (
+                  <g key={cat}>
+                    <path 
+                      d={`M80,80 L${x1},${y1} A70,70 0 0,1 ${x2},${y2} Z`} 
+                      fill={SPIN_COLORS[i]} 
+                      opacity="0.85" 
+                    />
+                    <text 
+                      x={tx} 
+                      y={ty}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="#fff" 
+                      fontSize="9"
+                      fontWeight="700" 
+                      fontFamily="'Syne', sans-serif"
+                      transform={`rotate(${(i + 0.5) * segAngle}, ${tx}, ${ty})`}
+                    >
+                      {cat}
+                    </text>
+                  </g>
+                );
+              })}
+              <circle cx="80" cy="80" r="16" fill="#0d0a1e" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+            </svg>
+          </div>
+          
+          {spinResult && (
+            <div className="text-[13px] text-[#e879f9] font-['Syne',sans-serif] font-[700]">
+              Your vibe: {spinResult} ✨
+            </div>
+          )}
+          
+          <button
+            onClick={spinWheel}
+            disabled={spinning}
+            className="px-8 py-[10px] rounded-[50px] bg-gradient-to-br from-[#e879f9] to-[#a855f7] border-none text-white font-['Syne',sans-serif] font-[700] text-[14px] cursor-pointer shadow-[0_0_20px_rgba(232,121,249,0.4)] disabled:opacity-50"
+          >
+            {spinning ? "Spinning..." : "Spin ✦"}
+          </button>
+        </div>
       </div>
-
-      {!result ? (
-        <button 
-          onClick={handleSpin}
-          disabled={isSpinning}
-          className={`w-full py-5 rounded-2xl font-black text-xl transition-all shadow-xl shadow-pink-500/20 text-white ${isSpinning ? 'bg-zinc-700 opacity-50 cursor-not-allowed' : 'bg-gradient-to-r from-pink-500 to-violet-600 hover:scale-105 active:scale-95'}`}
-        >
-          {isSpinning ? 'SPINNING...' : '🎰 SPIN THE WHEEL'}
-        </button>
-      ) : (
-        <div className="w-full space-y-4 animate-in zoom-in-95 duration-300">
-          <div className={`p-6 rounded-2xl border shadow-2xl transition-colors duration-300 ${isDarkMode ? 'bg-white/10 border-pink-500/50' : 'bg-white border-pink-200'}`}>
-            <p className={`text-xs uppercase tracking-widest mb-1 ${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}>Your Vibe Is:</p>
-            <h3 className="text-2xl font-bold text-pink-500">{result}</h3>
-          </div>
-          <button 
-            onClick={onAction}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
-          >
-            LET'S GO! 🚀
-          </button>
-          <button 
-            onClick={() => setResult(null)}
-            className={`w-full py-3 transition-all text-sm font-semibold ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            Spin Again
-          </button>
-        </div>
-      )}
     </div>
   );
 };

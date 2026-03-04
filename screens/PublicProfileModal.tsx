@@ -31,6 +31,7 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ userId, onClose
       const { latitude, longitude } = pos.coords;
 
       // Use the RPC to get distance, or fallback to standard select if not nearby
+      if (!supabase) return;
       const { data: nearbyUsers, error: rpcError } = await supabase.rpc('nearby_users', {
         lat: latitude,
         lng: longitude,
@@ -44,7 +45,7 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ userId, onClose
       if (foundUser) {
         setProfile(foundUser);
       } else {
-        // Fallback: fetch directly if they aren't in the nearby radius (or if discoverable is false, though we shouldn't show them then)
+        // Fallback: fetch directly
         const { data, error: fetchError } = await supabase
           .from('profiles')
           .select('*')
@@ -58,7 +59,7 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ userId, onClose
         } else if (data) {
           setProfile({
             ...data,
-            distance_meters: undefined // Unknown distance
+            distance_meters: undefined
           });
         }
       }
@@ -113,14 +114,16 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ userId, onClose
         {/* Header Image / Avatar */}
         <div className="w-full aspect-square relative bg-zinc-100 dark:bg-zinc-800">
           <img 
-            src={profile.avatar_url || `https://picsum.photos/seed/${profile.id}/600/600`} 
+            src={profile.profile_privacy === 'private' ? `https://picsum.photos/seed/private/600/600?blur=10` : (profile.avatar_url || `https://picsum.photos/seed/${profile.id}/600/600`)} 
             className="w-full h-full object-cover" 
             alt={profile.name} 
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
           
           <div className="absolute bottom-0 left-0 right-0 p-8">
-            <h2 className="text-3xl font-black text-white italic tracking-tight">{profile.name}</h2>
+            <h2 className="text-3xl font-black text-white italic tracking-tight">
+              {profile.profile_privacy === 'private' ? "Private Profile" : profile.name}
+            </h2>
             
             {profile.distance_meters !== undefined && (
               <div className="flex items-center space-x-2 mt-2">
@@ -142,20 +145,26 @@ const PublicProfileModal: React.FC<PublicProfileModalProps> = ({ userId, onClose
               <Sparkles size={12} /> Current Vibe
             </h3>
             <p className={`text-lg font-medium italic ${isDarkMode ? 'text-zinc-300' : 'text-slate-700'}`}>
-              "{profile.vibe}"
+              {profile.profile_privacy === 'private' ? '"Vibe is hidden"' : `"${profile.vibe}"`}
             </p>
           </div>
 
           <div className="flex space-x-4 pt-4">
-            <button 
-              onClick={() => {
-                onClose();
-                onStartChat(profile);
-              }}
-              className="flex-1 bg-pink-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-pink-700 transition-colors shadow-lg shadow-pink-500/20 active:scale-95"
-            >
-              <MessageCircle size={18} /> Chat
-            </button>
+            {profile.chat_privacy !== 'private' ? (
+              <button 
+                onClick={() => {
+                  onClose();
+                  onStartChat(profile);
+                }}
+                className="flex-1 bg-pink-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-pink-700 transition-colors shadow-lg shadow-pink-500/20 active:scale-95"
+              >
+                <MessageCircle size={18} /> Chat
+              </button>
+            ) : (
+              <div className="flex-1 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed">
+                <MessageCircle size={18} /> Chat Disabled
+              </div>
+            )}
             <button className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors border ${isDarkMode ? 'bg-zinc-800 border-white/10 text-white hover:bg-zinc-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}>
               <Heart size={20} />
             </button>

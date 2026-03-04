@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
   const [session, setSession] = useState<Session | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isBypassed, setIsBypassed] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -69,7 +70,7 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured && !isBypassed) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in duration-700">
           <div className="w-20 h-20 bg-pink-500/10 rounded-full flex items-center justify-center mb-6">
@@ -111,11 +112,18 @@ const App: React.FC = () => {
           >
             Open Supabase Dashboard <ExternalLink size={16} />
           </a>
+
+          <button 
+            onClick={() => setIsBypassed(true)}
+            className="mt-8 text-zinc-500 hover:text-white text-xs underline font-['DM_Sans',sans-serif] transition-colors"
+          >
+            Developer Bypass (UI Only)
+          </button>
         </div>
       );
     }
 
-    if (!session) {
+    if (!session && !isBypassed) {
       return (
         <div className="flex flex-col items-center justify-center h-full p-10 text-center">
           <h2 className="text-3xl font-black mb-4">Welcome to Vicinity Vibe</h2>
@@ -183,6 +191,13 @@ const App: React.FC = () => {
           >
             Sign in with GitHub
           </button>
+
+          <button 
+            onClick={() => setIsBypassed(true)}
+            className="mt-8 text-zinc-500 hover:text-white text-xs underline font-['DM_Sans',sans-serif] transition-colors"
+          >
+            Developer Bypass (UI Only)
+          </button>
         </div>
       );
     }
@@ -210,7 +225,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`flex flex-col h-screen overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-[#0F0F23] text-white' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`flex flex-col h-screen overflow-hidden transition-colors duration-300 ${isDarkMode ? 'bg-[#0d0a1e] text-white' : 'bg-slate-50 text-slate-900'}`}>
       {viewingProfileId && (
         <PublicProfileModal 
           userId={viewingProfileId} 
@@ -222,43 +237,51 @@ const App: React.FC = () => {
           isDarkMode={isDarkMode}
         />
       )}
-      <header className={`px-6 py-4 border-b flex justify-between items-center shrink-0 shadow-lg z-50 transition-colors duration-300 ${isDarkMode ? 'bg-[#1E1B4B] border-white/10' : 'bg-white border-slate-200'}`}>
-        <h1 className="text-xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">
-          VICINITY VIBE
-        </h1>
-        <div className="flex items-center space-x-3">
-          {deferredPrompt && (
-            <button 
-              onClick={handleInstallClick}
-              className="bg-cyan-500/20 border border-cyan-500/50 text-cyan-500 text-[10px] px-2 py-1 rounded-full font-black animate-pulse"
-            >
-              INSTALL APP
-            </button>
-          )}
-          <div className="bg-amber-500/20 border border-amber-500/50 text-amber-500 text-[10px] px-2 py-1 rounded-full font-black">3 BOOSTS</div>
+      
+      {/* Header */}
+      <div className="p-[16px_20px] flex justify-between items-center shrink-0">
+        <div className="font-['Syne',sans-serif] text-[20px] font-[800] tracking-[-0.5px]">
+          <span className={isDarkMode ? 'text-white' : 'text-slate-900'}>Vicinity</span>
+          <span className="text-[#e879f9]">Vibe</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="px-[10px] py-[4px] rounded-[20px] bg-white/5 border border-white/10 text-[10px] font-['DM_Sans',sans-serif] font-[700] text-[#e879f9]">
+            3 BOOSTS
+          </div>
           <button 
             onClick={() => setActiveTab(TabType.PROFILE)}
-            className={`w-9 h-9 rounded-full bg-gradient-to-br from-pink-500 to-amber-500 border-2 transition-transform active:scale-90 ${isDarkMode ? 'border-white/20' : 'border-slate-200'}`}
+            className="w-8 h-8 rounded-full border-none cursor-pointer p-0 overflow-hidden"
           >
-            <span className="text-sm">🧑‍🚀</span>
+            <div 
+              className="w-full h-full flex items-center justify-center font-['Syne',sans-serif] font-[700] text-[12px] text-white shadow-[0_0_16px_rgba(232,121,249,0.4)]"
+              style={{
+                background: `linear-gradient(135deg, #e879f988, #e879f944)`,
+                border: `2px solid #e879f9`
+              }}
+            >
+              ME
+            </div>
           </button>
         </div>
-      </header>
+      </div>
 
       <main className="flex-1 relative overflow-auto">
         {renderContent()}
       </main>
 
-      {session && (
-        <nav className={`h-20 border-t flex items-center justify-around px-1 shrink-0 z-50 overflow-x-auto scrollbar-hide transition-colors duration-300 ${isDarkMode ? 'bg-[#1E1B4B] border-white/10' : 'bg-white border-slate-200'}`}>
-          <NavButton active={activeTab === TabType.SWIPE} onClick={() => setActiveTab(TabType.SWIPE)} icon={<HeartIcon />} label="Swipe" isDarkMode={isDarkMode} />
-          <NavButton active={activeTab === TabType.MAP} onClick={() => setActiveTab(TabType.MAP)} icon={<MapIcon />} label="Map" isDarkMode={isDarkMode} />
-          <NavButton active={activeTab === TabType.TRENDING} onClick={() => setActiveTab(TabType.TRENDING)} icon={<FeedIcon />} label="Trends" isDarkMode={isDarkMode} />
-          <NavButton active={activeTab === TabType.ROULETTE} onClick={() => setActiveTab(TabType.ROULETTE)} icon={<RouletteIcon />} label="Play" isDarkMode={isDarkMode} />
-          <NavButton active={activeTab === TabType.STORIES} onClick={() => setActiveTab(TabType.STORIES)} icon={<StoryIcon />} label="Live" isDarkMode={isDarkMode} />
-          <NavButton active={activeTab === TabType.PROMOS} onClick={() => setActiveTab(TabType.PROMOS)} icon={<PromoIcon />} label="Promos" isDarkMode={isDarkMode} />
-          <NavButton active={activeTab === TabType.CHAT} onClick={() => setActiveTab(TabType.CHAT)} icon={<ChatIcon />} label="Chat" isDarkMode={isDarkMode} />
-        </nav>
+      {/* Navigation */}
+      {(session || isBypassed) && (
+        <div className="absolute bottom-0 left-0 right-0 h-[80px] bg-gradient-to-t from-[#0d0a1e] to-transparent pointer-events-none z-50 flex items-end justify-center pb-4">
+          <div className="flex items-center gap-2 p-[8px] rounded-[24px] bg-white/5 backdrop-blur-[16px] border border-white/10 pointer-events-auto">
+            <NavButton active={activeTab === TabType.SWIPE} onClick={() => setActiveTab(TabType.SWIPE)} icon={<HeartIcon />} label="Swipe" isDarkMode={isDarkMode} />
+            <NavButton active={activeTab === TabType.MAP} onClick={() => setActiveTab(TabType.MAP)} icon={<MapIcon />} label="Map" isDarkMode={isDarkMode} />
+            <NavButton active={activeTab === TabType.TRENDING} onClick={() => setActiveTab(TabType.TRENDING)} icon={<FeedIcon />} label="Feed" isDarkMode={isDarkMode} />
+            <NavButton active={activeTab === TabType.ROULETTE} onClick={() => setActiveTab(TabType.ROULETTE)} icon={<RouletteIcon />} label="Play" isDarkMode={isDarkMode} />
+            <NavButton active={activeTab === TabType.STORIES} onClick={() => setActiveTab(TabType.STORIES)} icon={<StoryIcon />} label="Live" isDarkMode={isDarkMode} />
+            <NavButton active={activeTab === TabType.PROMOS} onClick={() => setActiveTab(TabType.PROMOS)} icon={<PromoIcon />} label="Promos" isDarkMode={isDarkMode} />
+            <NavButton active={activeTab === TabType.CHAT} onClick={() => setActiveTab(TabType.CHAT)} icon={<ChatIcon />} label="Chat" isDarkMode={isDarkMode} />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -275,10 +298,14 @@ interface NavButtonProps {
 const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, isDarkMode }) => (
   <button 
     onClick={onClick}
-    className={`flex flex-col items-center justify-center space-y-1 transition-all min-w-[50px] ${active ? 'text-pink-500 scale-110' : isDarkMode ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-400 hover:text-slate-600'}`}
+    className="w-[44px] h-[44px] rounded-[16px] flex flex-col items-center justify-center gap-1 cursor-pointer transition-all border-none bg-transparent"
+    style={{
+      background: active ? "rgba(232,121,249,0.15)" : "transparent",
+      color: active ? "#e879f9" : "rgba(255,255,255,0.4)"
+    }}
   >
-    <div className="shrink-0">{icon}</div>
-    <span className="text-[8px] uppercase font-black tracking-tighter whitespace-nowrap">{label}</span>
+    <div className="shrink-0 scale-90">{icon}</div>
+    <span className="text-[8px] font-['DM_Sans',sans-serif] font-[700]">{label}</span>
   </button>
 );
 

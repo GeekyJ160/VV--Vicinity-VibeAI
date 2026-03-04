@@ -15,6 +15,8 @@ interface Conversation {
   lastMessage: Message;
 }
 
+const QUICK_REPLIES = ["Sounds great! 🎉", "When are you free?", "Let's do it!"];
+
 const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser }) => {
   const [msg, setMsg] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,6 +26,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!supabase) return;
     supabase.auth.getUser().then(({ data: { user } }) => {
       setCurrentUser(user);
     });
@@ -37,6 +40,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
     } else {
       fetchMessages();
 
+      if (!supabase) return;
       const channel = supabase.channel('messages')
         .on('postgres_changes', { 
           event: 'INSERT', 
@@ -63,10 +67,20 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
   }, [user, currentUser]);
 
   const fetchConversations = async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      // Fallback to mock data if bypassed
+      setConversations([
+        {
+          otherUser: { id: 'm1', name: 'Alex', vibe: 'Coffee & Code', avatar_url: 'https://picsum.photos/seed/alex/100/100', profile_privacy: 'everyone', chat_privacy: 'everyone', story_privacy: 'everyone', lat: 0, lng: 0 },
+          lastMessage: { id: 'msg1', sender_id: 'm1', receiver_id: 'me', content: 'Hey! Want to grab coffee?', created_at: new Date().toISOString() }
+        }
+      ]);
+      return;
+    }
     setLoadingConversations(true);
 
     try {
+      if (!supabase) throw new Error("Supabase not configured");
       // Fetch recent messages involving the current user
       const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
@@ -102,14 +116,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
 
       if (profilesError) throw profilesError;
 
+      const profilesMap = new Map<string, VibeUser>();
+      profilesData?.forEach((p: VibeUser) => profilesMap.set(p.id, p));
+
       const convos: Conversation[] = [];
-      profilesData?.forEach((profile: any) => {
-        const lastMsg = latestMessagesMap.get(profile.id);
-        if (lastMsg) {
-          convos.push({
-            otherUser: profile as VibeUser,
-            lastMessage: lastMsg
-          });
+      otherUserIds.forEach(id => {
+        const profile = profilesMap.get(id);
+        const lastMsg = latestMessagesMap.get(id);
+        if (profile && lastMsg) {
+          convos.push({ otherUser: profile, lastMessage: lastMsg });
         }
       });
 
@@ -119,13 +134,20 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
       setConversations(convos);
     } catch (err) {
       console.error("Error fetching conversations:", err);
+      // Fallback to mock data for prototyping
+      setConversations([
+        {
+          otherUser: { id: 'm1', name: 'Alex', vibe: 'Coffee & Code', avatar_url: 'https://picsum.photos/seed/alex/100/100', profile_privacy: 'everyone', chat_privacy: 'everyone', story_privacy: 'everyone', lat: 0, lng: 0 },
+          lastMessage: { id: 'msg1', sender_id: 'm1', receiver_id: 'me', content: 'Hey! Want to grab coffee?', created_at: new Date().toISOString() }
+        }
+      ]);
     } finally {
       setLoadingConversations(false);
     }
   };
 
   const fetchMessages = async () => {
-    if (!user || !currentUser) return;
+    if (!user || !currentUser || !supabase) return;
 
     const { data, error } = await supabase
       .from('messages')
@@ -154,6 +176,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
     const text = msg.trim();
     setMsg('');
 
+    if (!supabase) return;
     const { error } = await supabase.from('messages').insert({
       sender_id: currentUser.id,
       receiver_id: user.id,
@@ -167,23 +190,27 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
 
   if (!user) {
     return (
-      <div className="h-full flex flex-col animate-in fade-in duration-500">
-        <div className="p-6 pb-2">
-          <h2 className={`text-2xl font-black italic tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Messages</h2>
-          <p className={`text-xs font-bold uppercase tracking-widest mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>Recent Syncs</p>
+      <div className="h-full flex flex-col animate-in fade-in duration-500 overflow-y-auto pb-24">
+        <div className="p-5 pb-1">
+          <div className="font-['Syne',sans-serif] text-[22px] font-[800] tracking-[-0.5px] mb-1">
+            <span className={isDarkMode ? 'text-white' : 'text-slate-900'}>Matches</span>
+          </div>
+          <div className="text-[12px] font-['DM_Sans',sans-serif] text-white/40 mb-5">
+            People who match your vibe
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 scrollbar-hide">
+        <div className="flex flex-col gap-3 px-4">
           {loadingConversations ? (
             <div className="flex justify-center p-10">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-pink-500 border-t-transparent"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#e879f9] border-t-transparent"></div>
             </div>
           ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-10 text-center h-full">
               <div className="text-6xl mb-6 opacity-20">💬</div>
-              <h3 className={`text-lg font-black italic mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>No messages yet</h3>
+              <h3 className={`text-lg font-black italic mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>No matches yet</h3>
               <p className={`text-sm ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>
-                Start a conversation from the Map or Swipe screens to connect with nearby vibes.
+                Keep swiping to find your vibe tribe.
               </p>
             </div>
           ) : (
@@ -191,29 +218,32 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
               <div 
                 key={conv.otherUser.id}
                 onClick={() => onSelectUser && onSelectUser(conv.otherUser)}
-                className={`flex items-center space-x-4 p-4 rounded-3xl cursor-pointer transition-all active:scale-95 border ${
-                  isDarkMode ? 'bg-zinc-900/50 border-white/5 hover:bg-zinc-800' : 'bg-white border-slate-100 shadow-sm hover:bg-slate-50'
-                }`}
+                className="p-[14px_16px] flex items-center gap-[14px] cursor-pointer bg-white/5 backdrop-blur-[16px] border border-white/10 rounded-[20px]"
               >
-                <div className="relative shrink-0">
-                  <img src={conv.otherUser.avatar_url || `https://picsum.photos/seed/${conv.otherUser.id}/80/80`} className="w-14 h-14 rounded-full border-2 border-pink-500 object-cover" alt="" />
-                  <div className={`absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 ${isDarkMode ? 'border-zinc-900' : 'border-white'}`}></div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline mb-1">
-                    <h3 className={`font-black text-base truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{conv.otherUser.name}</h3>
-                    <span className={`text-[10px] font-bold uppercase tracking-tighter shrink-0 ml-2 ${isDarkMode ? 'text-zinc-500' : 'text-slate-400'}`}>
-                      {new Date(conv.lastMessage.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </span>
+                <div className="relative">
+                  <div 
+                    className="w-12 h-12 rounded-full flex items-center justify-center font-['Syne',sans-serif] font-[700] text-[16px] text-white shadow-[0_0_16px_rgba(232,121,249,0.4)]"
+                    style={{
+                      background: `linear-gradient(135deg, #e879f988, #e879f944)`,
+                      border: `2px solid #e879f9`
+                    }}
+                  >
+                    {conv.otherUser.name.substring(0, 2).toUpperCase()}
                   </div>
-                  <p className={`text-sm truncate ${
-                    conv.lastMessage.sender_id === currentUser?.id 
-                      ? (isDarkMode ? 'text-zinc-500' : 'text-slate-400')
-                      : (isDarkMode ? 'text-zinc-300 font-medium' : 'text-slate-700 font-medium')
-                  }`}>
-                    {conv.lastMessage.sender_id === currentUser?.id ? 'You: ' : ''}{conv.lastMessage.content}
-                  </p>
+                  <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#22c55e] border-[2px] border-[#0d0a1e]" />
                 </div>
+                <div className="flex-1">
+                  <div className="font-['Syne',sans-serif] font-[700] text-white text-[15px]">
+                    {conv.otherUser.name}
+                  </div>
+                  <div className="text-[12px] text-[#e879f9] font-['DM_Sans',sans-serif]">
+                    {conv.otherUser.vibe}
+                  </div>
+                  <div className="text-[11px] text-white/30 font-['DM_Sans',sans-serif] mt-[2px]">
+                    {new Date(conv.lastMessage.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+                <div className="text-white/20 text-[18px]">›</div>
               </div>
             ))
           )}
@@ -224,84 +254,94 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ user, isDarkMode, onSelectUser 
 
   return (
     <div className="h-full flex flex-col animate-in fade-in duration-500 bg-transparent overflow-hidden">
-      <header className={`px-6 py-4 border-b flex items-center justify-between shrink-0 transition-colors duration-300 ${isDarkMode ? 'border-white/5 bg-[#1E1B4B]/50' : 'bg-white border-slate-200 shadow-sm'}`}>
-        <div className="flex items-center space-x-3">
-          <button 
-            onClick={() => onSelectUser && onSelectUser(null)}
-            className={`p-2 -ml-2 rounded-full transition-colors ${isDarkMode ? 'text-zinc-400 hover:text-white hover:bg-white/10' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`}
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="relative">
-            <img src={user.avatar_url || `https://picsum.photos/seed/${user.id}/40/40`} className="w-10 h-10 rounded-full border-2 border-pink-500 shadow-sm object-cover" alt="" />
-            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 ${isDarkMode ? 'border-[#0F0F23]' : 'border-white'}`}></div>
-          </div>
-          <div>
-            <h3 className={`font-bold text-sm leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{user.name}</h3>
-            <p className="text-[10px] mt-1 text-pink-500 font-black uppercase tracking-widest">Online Nearby</p>
-          </div>
-        </div>
-        <button className={`p-2 rounded-full hover:bg-white/10 ${isDarkMode ? 'text-white' : 'text-slate-400'}`}>
-          <MoreVertical size={20} />
+      {/* Chat header */}
+      <div className="p-[16px_16px_12px] flex items-center gap-[12px] border-b border-white/5 shrink-0">
+        <button 
+          onClick={() => onSelectUser && onSelectUser(null)}
+          className="bg-transparent border-none text-white/50 text-[20px] cursor-pointer"
+        >
+          ←
         </button>
-      </header>
-
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
-        <div className="text-center">
-          <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${isDarkMode ? 'bg-white/5 text-zinc-500' : 'bg-slate-100 text-slate-400'}`}>
-            Sync established via {user.vibe?.split(' ')[0] || 'shared'} vibe
-          </span>
+        <div 
+          className="w-[38px] h-[38px] rounded-full flex items-center justify-center font-['Syne',sans-serif] font-[700] text-[13px] text-white shadow-[0_0_16px_rgba(232,121,249,0.4)]"
+          style={{
+            background: `linear-gradient(135deg, #e879f988, #e879f944)`,
+            border: `2px solid #e879f9`
+          }}
+        >
+          {user.name.substring(0, 2).toUpperCase()}
         </div>
-
-        {messages.map((m) => (
-          <div 
-            key={m.id} 
-            className={`flex flex-col ${m.sender_id === currentUser?.id ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 duration-300`}
-          >
-            <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm shadow-sm transition-all ${
-              m.sender_id === currentUser?.id 
-                ? 'bg-gradient-to-br from-pink-600 to-violet-600 text-white rounded-tr-none' 
-                : isDarkMode 
-                  ? 'bg-zinc-800 text-white border border-white/5 rounded-tl-none' 
-                  : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
-            }`}>
-              {m.content}
-            </div>
-            <span className={`text-[9px] mt-1.5 font-bold uppercase tracking-tighter opacity-40 ${isDarkMode ? 'text-zinc-500' : 'text-slate-500'}`}>
-              {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </span>
+        <div>
+          <div className="font-['Syne',sans-serif] font-[700] text-white text-[14px]">
+            {user.name}
           </div>
-        ))}
+          <div className="text-[11px] text-[#e879f9]">
+            {user.vibe}
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-[16px] flex flex-col gap-[10px] scrollbar-hide">
+        {messages.map((m) => {
+          const isMe = m.sender_id === currentUser?.id;
+          return (
+            <div 
+              key={m.id} 
+              className="flex"
+              style={{ justifyContent: isMe ? "flex-end" : "flex-start" }}
+            >
+              <div 
+                className="max-w-[72%] p-[10px_14px] text-white font-['DM_Sans',sans-serif] text-[14px] leading-[1.5]"
+                style={{
+                  borderRadius: isMe ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                  background: isMe ? "linear-gradient(135deg, #e879f9, #a855f7)" : "rgba(255,255,255,0.07)",
+                  border: isMe ? "none" : "1px solid rgba(255,255,255,0.08)"
+                }}
+              >
+                {m.content}
+                <div 
+                  className="text-[9px] text-white/40 mt-1"
+                  style={{ textAlign: isMe ? "right" : "left" }}
+                >
+                  {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className={`p-4 pb-10 transition-colors duration-300 ${isDarkMode ? 'bg-transparent' : 'bg-white border-t border-slate-100'}`}>
-        <form 
-          onSubmit={handleSendMessage}
-          className={`flex items-center space-x-2 rounded-[1.5rem] px-4 py-1.5 border transition-all duration-300 focus-within:ring-2 focus-within:ring-pink-500/30 ${
-            isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
-          }`}
-        >
-          <button type="button" className={`p-2 transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-pink-500' : 'text-slate-400 hover:text-pink-500'}`}>
-            <MapPin size={20} />
-          </button>
-          
-          <input 
-            type="text" 
-            placeholder="Type a message..." 
-            className={`bg-transparent border-none outline-none flex-1 py-3 text-sm font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-          />
-
+      {/* Quick replies */}
+      <div className="p-[0_12px_8px] flex gap-[8px] overflow-x-auto scrollbar-hide shrink-0">
+        {QUICK_REPLIES.map(q => (
           <button 
-            type="submit"
-            disabled={!msg.trim()}
-            className={`p-2 rounded-full transition-all ${msg.trim() ? 'bg-pink-600 text-white scale-110 shadow-lg shadow-pink-500/30 hover:bg-pink-500' : 'text-zinc-500'}`}
+            key={q} 
+            onClick={() => setMsg(q)}
+            className="p-[6px_12px] rounded-[20px] shrink-0 bg-white/5 border border-white/10 text-white/70 text-[11px] font-['DM_Sans',sans-serif] cursor-pointer"
           >
-            <Send size={18} />
+            {q}
           </button>
-        </form>
+        ))}
+      </div>
+
+      {/* Input */}
+      <div className="p-[8px_12px_16px] flex gap-[10px] items-center shrink-0">
+        <input 
+          value={msg}
+          onChange={e => setMsg(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleSendMessage()}
+          placeholder="Say something..."
+          className="flex-1 p-[12px_16px] rounded-[50px] bg-white/5 border border-white/10 text-white text-[14px] font-['DM_Sans',sans-serif] outline-none"
+        />
+        <button 
+          onClick={handleSendMessage}
+          disabled={!msg.trim()}
+          className="w-[44px] h-[44px] rounded-full bg-gradient-to-br from-[#e879f9] to-[#a855f7] border-none text-white text-[18px] cursor-pointer flex items-center justify-center shadow-[0_0_16px_rgba(232,121,249,0.4)] disabled:opacity-50"
+        >
+          ↑
+        </button>
       </div>
     </div>
   );

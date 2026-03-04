@@ -210,7 +210,7 @@ const App: React.FC = () => {
       case TabType.ROULETTE: 
         return <RouletteScreen onAction={() => setActiveTab(TabType.MAP)} isDarkMode={isDarkMode} />;
       case TabType.STORIES:
-        return <StoriesScreen isDarkMode={isDarkMode} />;
+        return <StoriesScreen isDarkMode={isDarkMode} onViewProfile={handleViewProfile} />;
       case TabType.TRENDING:
         return <VibeFeedScreen isDarkMode={isDarkMode} onViewProfile={handleViewProfile} />;
       case TabType.PROMOS: 

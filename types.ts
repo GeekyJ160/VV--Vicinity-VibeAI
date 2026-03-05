@@ -12,6 +12,7 @@ export interface VibeUser {
   story_privacy?: 'everyone' | 'private';
   chat_privacy?: 'everyone' | 'private';
   updated_at?: string;
+  score?: number;
 }
 
 export interface Story {
@@ -26,6 +27,9 @@ export interface Story {
   distance_meters?: number;
   created_at: string;
   expires_at: string;
+  avatar_url?: string;
+  story_privacy?: 'everyone' | 'private';
+  score?: number;
 }
 
 export interface Message {

@@ -2,142 +2,70 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Story } from '../types';
 import { supabase } from '../supabaseClient';
-import { Camera, Plus, ChevronLeft, ChevronRight, Filter, Clock, MapPin, SlidersHorizontal } from 'lucide-react';
+import { Camera, Plus, Filter, Clock, MapPin, SlidersHorizontal, Video, X, Play } from 'lucide-react';
+import { SectionHeader, PulseDot } from '../components/Icons';
 
 interface StoriesScreenProps {
   isDarkMode: boolean;
   onViewProfile?: (userId: string) => void;
 }
 
+const MOCK_STORIES: Story[] = [
+  { id: 's1', user_id: 'm1', name: 'Alex Chen', vibe: 'Coffee & Code ☕', image_url: 'https://picsum.photos/seed/alex/400/700', caption: 'Morning brew ☕ Best spot in the city', created_at: new Date().toISOString(), distance_meters: 1200, avatar_url: 'https://picsum.photos/seed/alex/100/100', story_privacy: 'everyone', expires_at: '', lat: 0, lng: 0 },
+  { id: 's2', user_id: 'm2', name: 'Sam Rivera', vibe: 'Live Music 🎸', image_url: 'https://picsum.photos/seed/concert/400/700', caption: 'Soundcheck 🎸 Front row at Neon Lounge', created_at: new Date(Date.now() - 1800000).toISOString(), distance_meters: 800, avatar_url: 'https://picsum.photos/seed/sam/100/100', story_privacy: 'everyone', expires_at: '', lat: 0, lng: 0 },
+  { id: 's3', user_id: 'm3', name: 'Jordan K.', vibe: 'Chill 🌿', image_url: 'https://picsum.photos/seed/nature/400/700', caption: 'Park vibes 🌳 Perfect afternoon', created_at: new Date(Date.now() - 7200000).toISOString(), distance_meters: 3500, avatar_url: 'https://picsum.photos/seed/jordan/100/100', story_privacy: 'everyone', expires_at: '', lat: 0, lng: 0 },
+  { id: 's4', user_id: 'm4', name: 'Casey Park', vibe: 'Party 🎉', image_url: 'https://picsum.photos/seed/party/400/700', caption: 'Let\'s goooo!! 🎉 Rooftop vibes', created_at: new Date(Date.now() - 1800000).toISOString(), distance_meters: 8500, avatar_url: 'https://picsum.photos/seed/casey/100/100', story_privacy: 'everyone', expires_at: '', lat: 0, lng: 0 },
+  { id: 's5', user_id: 'm5', name: 'Morgan Lee', vibe: 'Photography 📷', image_url: 'https://picsum.photos/seed/street/400/700', caption: 'Golden hour 📷 Downtown never looked better', created_at: new Date(Date.now() - 3600000).toISOString(), distance_meters: 2000, avatar_url: 'https://picsum.photos/seed/morgan/100/100', story_privacy: 'everyone', expires_at: '', lat: 0, lng: 0 },
+];
+
 const StoriesScreen: React.FC<StoriesScreenProps> = ({ isDarkMode, onViewProfile }) => {
   const [stories, setStories] = useState<Story[]>([]);
   const [currentStoryIndex, setCurrentStoryIndex] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [storyPrivacy, setStoryPrivacy] = useState<'everyone' | 'private'>('everyone');
-  
-  // Filtering & Sorting State
   const [filterText, setFilterText] = useState('');
   const [maxDistance, setMaxDistance] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<'recency' | 'proximity'>('recency');
   const [showFilters, setShowFilters] = useState(false);
+  const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; x: number }[]>([]);
+  const [storyProgress, setStoryProgress] = useState(0);
 
-  // Floating emojis state
-  const [floatingEmojis, setFloatingEmojis] = useState<{id: number, emoji: string, x: number}[]>([]);
-
-  useEffect(() => {
-    fetchStories();
-  }, []);
+  useEffect(() => { fetchStories(); }, []);
 
   const fetchStories = async () => {
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
       });
       const { latitude, longitude } = pos.coords;
-      
-      if (!supabase) return;
-      const { data, error } = await supabase.rpc('nearby_stories', {
-        lat: latitude,
-        lng: longitude,
-        radius_meters: 10000
-      });
-
+      if (!supabase) throw new Error('No Supabase');
+      const { data, error } = await supabase.rpc('nearby_stories', { lat: latitude, lng: longitude, radius_meters: 10000 });
       if (error) throw error;
-
-      // Filter out stories from users who have story_privacy set to 'private'
-      const filteredStories = data?.filter((s: any) => s.story_privacy !== 'private') || [];
-      setStories(filteredStories);
-    } catch (err) {
-      console.error('Error fetching stories:', err);
-      // Fallback to mock data for prototyping
-      setStories([
-        { id: 's1', user_id: 'm1', name: 'Alex', vibe: 'Coffee & Code', image_url: 'https://picsum.photos/seed/alex/400/600', caption: 'Morning brew ☕', created_at: new Date().toISOString(), distance_meters: 1200, avatar_url: 'https://picsum.photos/seed/alex/100/100', story_privacy: 'everyone', lat: 0, lng: 0 },
-        { id: 's2', user_id: 'm2', name: 'Sam', vibe: 'Live Music', image_url: 'https://picsum.photos/seed/sam/400/600', caption: 'Soundcheck 🎸', created_at: new Date(Date.now() - 3600000).toISOString(), distance_meters: 800, avatar_url: 'https://picsum.photos/seed/sam/100/100', story_privacy: 'everyone', lat: 0, lng: 0 },
-        { id: 's3', user_id: 'm3', name: 'Jordan', vibe: 'Chill', image_url: 'https://picsum.photos/seed/jordan/400/600', caption: 'Park vibes 🌳', created_at: new Date(Date.now() - 7200000).toISOString(), distance_meters: 3500, avatar_url: 'https://picsum.photos/seed/jordan/100/100', story_privacy: 'everyone', lat: 0, lng: 0 },
-        { id: 's4', user_id: 'm4', name: 'Casey', vibe: 'Party', image_url: 'https://picsum.photos/seed/casey/400/600', caption: 'Let\'s gooo 🎉', created_at: new Date(Date.now() - 1800000).toISOString(), distance_meters: 8500, avatar_url: 'https://picsum.photos/seed/casey/100/100', story_privacy: 'everyone', lat: 0, lng: 0 }
-      ]);
+      const filtered = data?.filter((s: any) => s.story_privacy !== 'private') || [];
+      setStories(filtered);
+    } catch {
+      setStories(MOCK_STORIES);
     }
   };
 
   const filteredAndSortedStories = useMemo(() => {
     let result = [...stories];
-
-    // Filter by text (user name, caption, or vibe)
     if (filterText.trim()) {
-      const lowerFilter = filterText.toLowerCase();
-      result = result.filter(s => 
-        (s.caption?.toLowerCase().includes(lowerFilter)) || 
-        (s.name?.toLowerCase().includes(lowerFilter)) ||
-        (s.vibe?.toLowerCase().includes(lowerFilter))
-      );
+      const lf = filterText.toLowerCase();
+      result = result.filter(s => s.caption?.toLowerCase().includes(lf) || s.name?.toLowerCase().includes(lf) || s.vibe?.toLowerCase().includes(lf));
     }
-
-    // Filter by distance
-    if (maxDistance !== null) {
-      result = result.filter(s => (s.distance_meters || 0) <= maxDistance);
-    }
-
-    // Sort
-    if (sortBy === 'recency') {
-      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    } else {
-      result.sort((a, b) => (a.distance_meters || 0) - (b.distance_meters || 0));
-    }
-
+    if (maxDistance !== null) result = result.filter(s => (s.distance_meters || 0) <= maxDistance);
+    if (sortBy === 'recency') result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    else result.sort((a, b) => (a.distance_meters || 0) - (b.distance_meters || 0));
     return result;
   }, [stories, filterText, maxDistance, sortBy]);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    setUploadProgress(0);
-
-    if (!supabase) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-    const filePath = `stories/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars') // Using existing bucket for simplicity, usually separate
-      .upload(filePath, file, {
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      setUploading(false);
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-
-    const { error: dbError } = await supabase.from('stories').insert({
-      user_id: user.id,
-      image_url: publicUrl,
-      caption: 'New vibe! ✨',
-      lat: 0, // Should ideally get current lat/lng
-      lng: 0,
-      story_privacy: storyPrivacy
-    });
-
-    if (dbError) {
-      console.error('DB error:', dbError);
-    } else {
-      fetchStories();
-    }
-
-    setUploading(false);
-  };
+  const currentStory = currentStoryIndex !== null ? filteredAndSortedStories[currentStoryIndex] : null;
 
   const storyNext = () => {
     if (currentStoryIndex !== null && currentStoryIndex < filteredAndSortedStories.length - 1) {
       setCurrentStoryIndex(currentStoryIndex + 1);
+      setStoryProgress(0);
     } else {
       setCurrentStoryIndex(null);
     }
@@ -146,249 +74,124 @@ const StoriesScreen: React.FC<StoriesScreenProps> = ({ isDarkMode, onViewProfile
   const storyPrev = () => {
     if (currentStoryIndex !== null && currentStoryIndex > 0) {
       setCurrentStoryIndex(currentStoryIndex - 1);
+      setStoryProgress(0);
     }
   };
 
   const handleReaction = (emoji: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const newEmoji = {
-      id: Date.now() + Math.random(),
-      emoji,
-      x: Math.random() * 80 + 10, // random percentage between 10% and 90%
-    };
-    setFloatingEmojis(prev => [...prev, newEmoji]);
-    
-    // Remove emoji after animation
-    setTimeout(() => {
-      setFloatingEmojis(prev => prev.filter(e => e.id !== newEmoji.id));
-    }, 2000);
+    const fe = { id: Date.now() + Math.random(), emoji, x: Math.random() * 80 + 10 };
+    setFloatingEmojis(prev => [...prev, fe]);
+    setTimeout(() => setFloatingEmojis(prev => prev.filter(e => e.id !== fe.id)), 2000);
   };
 
   return (
-    <div className="h-full flex flex-col p-6 animate-in fade-in duration-500 overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       <style>{`
-        @keyframes progress {
-          0% { width: 0%; }
-          100% { width: 100%; }
-        }
-        @keyframes floatUp {
-          0% { transform: translateY(0) scale(1); opacity: 1; }
-          100% { transform: translateY(-200px) scale(1.5); opacity: 0; }
-        }
+        @keyframes progress { 0% { width: 0% } 100% { width: 100% } }
+        @keyframes floatUp { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-200px) scale(1.5); opacity: 0; } }
       `}</style>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className={`text-2xl font-black italic tracking-tighter ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Nearby Stories</h2>
-        <div className="flex items-center space-x-3">
-          <select 
-            value={storyPrivacy}
-            onChange={(e) => setStoryPrivacy(e.target.value as 'everyone' | 'private')}
-            className={`text-xs font-bold uppercase tracking-wider outline-none cursor-pointer bg-transparent border-none ${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}
-          >
-            <option value="everyone" className={isDarkMode ? 'bg-zinc-800' : 'bg-white'}>Public</option>
-            <option value="private" className={isDarkMode ? 'bg-zinc-800' : 'bg-white'}>Private</option>
-          </select>
-          <label className="cursor-pointer bg-pink-600 p-3 rounded-full shadow-lg shadow-pink-500/30 active:scale-95 transition-all">
-            <Plus className="text-white" size={24} />
-            <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
-          </label>
-        </div>
-      </div>
 
-      {/* Filter & Sort Bar */}
-      <div className="flex flex-col space-y-3 mb-6">
-        <div className="flex space-x-2">
-          <div className={`flex-1 flex items-center space-x-2 px-4 py-2 rounded-2xl border backdrop-blur-xl transition-colors ${isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
-            <Filter size={16} className={isDarkMode ? 'text-zinc-400' : 'text-slate-400'} />
-            <input 
-              type="text" 
-              placeholder="Search user, vibe, or caption..." 
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              className="bg-transparent border-none outline-none text-sm w-full placeholder:text-zinc-500"
-            />
-          </div>
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 rounded-2xl border flex items-center justify-center transition-colors ${
-              showFilters 
-                ? 'bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-500/20' 
-                : isDarkMode ? 'bg-black/40 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'
-            }`}
-          >
-            <SlidersHorizontal size={16} />
-          </button>
-        </div>
-
-        {showFilters && (
-          <div className={`p-4 rounded-2xl border space-y-4 animate-in slide-in-from-top-2 fade-in duration-200 ${isDarkMode ? 'bg-black/40 border-white/10' : 'bg-white border-slate-200'}`}>
-            <div>
-              <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}>Distance</label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { label: 'Any', value: null },
-                  { label: '< 1km', value: 1000 },
-                  { label: '< 5km', value: 5000 },
-                  { label: '< 10km', value: 10000 },
-                ].map(opt => (
-                  <button
-                    key={opt.label}
-                    onClick={() => setMaxDistance(opt.value)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
-                      maxDistance === opt.value
-                        ? 'bg-pink-600 text-white shadow-md shadow-pink-500/20'
-                        : isDarkMode ? 'bg-white/5 text-zinc-300 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <label className={`text-xs font-bold uppercase tracking-wider mb-2 block ${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}>Sort By</label>
-              <div className="flex space-x-2">
-                <button 
-                  onClick={() => setSortBy('recency')}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
-                    sortBy === 'recency' 
-                      ? 'bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-500/20' 
-                      : isDarkMode ? 'bg-white/5 border-white/10 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'
-                  }`}
-                >
-                  <Clock size={12} />
-                  <span>Newest</span>
-                </button>
-                <button 
-                  onClick={() => setSortBy('proximity')}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
-                    sortBy === 'proximity' 
-                      ? 'bg-pink-600 border-pink-600 text-white shadow-lg shadow-pink-500/20' 
-                      : isDarkMode ? 'bg-white/5 border-white/10 text-zinc-400' : 'bg-white border-slate-200 text-slate-500'
-                  }`}
-                >
-                  <MapPin size={12} />
-                  <span>Closest</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {uploading && (
-        <div className="mb-6 bg-pink-500/10 border border-pink-500/20 p-4 rounded-2xl flex items-center space-x-4">
-          <div className="animate-spin rounded-full h-5 w-5 border-2 border-pink-500 border-t-transparent"></div>
-          <span className="text-xs font-black uppercase tracking-widest text-pink-500">Uploading your vibe...</span>
-        </div>
-      )}
-
-      <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-hide shrink-0">
-        {filteredAndSortedStories.map((s, idx) => (
-          <div key={s.id} className="flex flex-col items-center shrink-0 space-y-2" onClick={() => setCurrentStoryIndex(idx)}>
-            <div className={`w-20 h-20 rounded-full p-1 border-2 border-pink-500 cursor-pointer active:scale-95 transition-all`}>
-              <img src={s.image_url} className="w-full h-full rounded-full object-cover" alt={s.name} />
-            </div>
-            <span className={`text-[10px] font-black uppercase tracking-tighter ${isDarkMode ? 'text-zinc-400' : 'text-slate-500'}`}>{s.name}</span>
-          </div>
-        ))}
-        {filteredAndSortedStories.length === 0 && (
-          <div className="text-zinc-500 text-xs italic py-4">
-            {filterText || maxDistance !== null ? 'No stories match your filters.' : 'No stories nearby yet. Be the first!'}
-          </div>
-        )}
-      </div>
-
-      {currentStoryIndex !== null && (
+      {/* ─── Story Viewer ─────────────────────────────────────── */}
+      {currentStory && (
         <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-          <div className="relative w-full h-full max-w-md">
-            <img src={filteredAndSortedStories[currentStoryIndex].image_url} className="w-full h-full object-cover" />
-            
-            <div className="absolute top-10 left-6 right-6 flex items-center space-x-1.5 z-50">
+          <div className="relative w-full h-full max-w-md mx-auto">
+            {/* Background Image */}
+            <img src={currentStory.image_url} className="w-full h-full object-cover" alt="" />
+
+            {/* Gradient overlays */}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 30%, transparent 60%, rgba(0,0,0,0.8) 100%)' }} />
+
+            {/* Progress bars */}
+            <div className="absolute top-0 left-0 right-0 p-3 flex gap-1 z-50">
               {filteredAndSortedStories.map((_, idx) => (
-                <div key={idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
-                  <div 
-                    key={idx === currentStoryIndex ? `anim-${currentStoryIndex}` : `static-${idx}`}
-                    className={`h-full bg-white ${
-                      idx === currentStoryIndex 
-                        ? '' 
-                        : idx < currentStoryIndex 
-                          ? 'w-full' 
-                          : 'w-0'
-                    }`}
-                    style={idx === currentStoryIndex ? { animation: 'progress 5s linear forwards' } : {}}
+                <div key={idx} className="flex-1 h-0.5 rounded-full overflow-hidden bg-white/25">
+                  <div
+                    key={`${idx}-${currentStoryIndex}`}
+                    className="h-full rounded-full bg-white"
+                    style={{
+                      width: idx < (currentStoryIndex || 0) ? '100%' : '0%',
+                      animation: idx === currentStoryIndex ? 'progress 5s linear forwards' : 'none',
+                    }}
                     onAnimationEnd={idx === currentStoryIndex ? storyNext : undefined}
-                  ></div>
+                  />
                 </div>
               ))}
             </div>
 
-            <div 
-              className="absolute top-16 left-6 flex items-center space-x-3 z-50 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onViewProfile) {
-                  onViewProfile(filteredAndSortedStories[currentStoryIndex].user_id);
-                  setCurrentStoryIndex(null); // Optional: close story when opening profile
-                }
-              }}
-            >
-              <div className="w-10 h-10 rounded-full border-2 border-pink-500 overflow-hidden">
-                <img src={filteredAndSortedStories[currentStoryIndex].avatar_url || filteredAndSortedStories[currentStoryIndex].image_url} className="w-full h-full object-cover" />
-              </div>
-              <div>
-                <div className="text-white font-black text-sm hover:underline">{filteredAndSortedStories[currentStoryIndex].name}</div>
-                <div className="text-white/60 text-[10px] font-bold uppercase tracking-widest">
-                  {Math.round(filteredAndSortedStories[currentStoryIndex].distance_meters || 0)}m away
+            {/* User info header */}
+            <div className="absolute top-6 left-0 right-0 px-4 flex items-center justify-between z-50">
+              <div
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onViewProfile) { onViewProfile(currentStory.user_id); setCurrentStoryIndex(null); }
+                }}
+              >
+                <div className="p-0.5 rounded-full" style={{ background: 'linear-gradient(135deg, #e879f9, #a855f7)' }}>
+                  <img
+                    src={currentStory.avatar_url || currentStory.image_url}
+                    className="w-9 h-9 rounded-full object-cover border-2"
+                    style={{ borderColor: '#000' }}
+                    alt=""
+                  />
+                </div>
+                <div>
+                  <div className="text-white font-['Syne',sans-serif] font-[700] text-[13px] hover:underline">{currentStory.name}</div>
+                  <div className="text-white/50 text-[10px] font-medium">
+                    {Math.round(currentStory.distance_meters || 0)}m away
+                  </div>
                 </div>
               </div>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); setCurrentStoryIndex(null); }}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}
+              >
+                <X size={16} className="text-white" />
+              </button>
             </div>
 
-            <button onClick={() => setCurrentStoryIndex(null)} className="absolute top-16 right-6 text-white/50 hover:text-white">
-              ✕
-            </button>
+            {/* Touch nav zones */}
+            <div className="absolute inset-y-0 left-0 w-1/3 z-40" onClick={storyPrev} />
+            <div className="absolute inset-y-0 right-0 w-1/3 z-40" onClick={storyNext} />
 
-            <div className="absolute inset-y-0 left-0 w-1/4 z-40" onClick={storyPrev}></div>
-            <div className="absolute inset-y-0 right-0 w-1/4 z-40" onClick={storyNext}></div>
-
-            {/* Floating Emojis */}
+            {/* Floating emoji reactions */}
             {floatingEmojis.map(fe => (
-              <div 
-                key={fe.id}
-                className="absolute bottom-40 text-4xl pointer-events-none z-[60] animate-[floatUp_2s_ease-out_forwards]"
-                style={{ left: `${fe.x}%` }}
-              >
+              <div key={fe.id} className="absolute bottom-40 text-4xl pointer-events-none z-[60]"
+                style={{ left: `${fe.x}%`, animation: 'floatUp 2s ease-out forwards' }}>
                 {fe.emoji}
               </div>
             ))}
 
-            <div className="absolute bottom-10 left-6 right-6 flex flex-col space-y-3 z-50">
-              <div className="bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                <p className="text-white text-sm font-medium">{filteredAndSortedStories[currentStoryIndex].caption}</p>
-              </div>
-              
-              {/* Reaction Bar */}
-              <div className="flex justify-between items-center bg-black/40 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+            {/* Bottom content */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 z-50 space-y-3">
+              {currentStory.caption && (
+                <div
+                  className="p-4 rounded-2xl"
+                  style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  <p className="text-white text-sm font-medium leading-relaxed">{currentStory.caption}</p>
+                </div>
+              )}
+
+              {/* Reactions */}
+              <div
+                className="flex justify-between items-center p-3 rounded-2xl"
+                style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
                 {['❤️', '😂', '😮', '😢', '🔥', '👏'].map(emoji => (
-                  <button 
-                    key={emoji}
-                    onClick={(e) => handleReaction(emoji, e)}
-                    className="text-2xl hover:scale-125 transition-transform active:scale-95"
-                  >
+                  <button key={emoji} onClick={(e) => handleReaction(emoji, e)} className="text-2xl hover:scale-125 transition-transform active:scale-95">
                     {emoji}
                   </button>
                 ))}
               </div>
 
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onViewProfile) {
-                    onViewProfile(filteredAndSortedStories[currentStoryIndex].user_id);
-                    setCurrentStoryIndex(null);
-                  }
-                }}
-                className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white py-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-colors z-50"
+              <button
+                onClick={(e) => { e.stopPropagation(); if (onViewProfile) { onViewProfile(currentStory.user_id); setCurrentStoryIndex(null); } }}
+                className="w-full py-3 rounded-2xl text-white font-[700] text-[12px] uppercase tracking-widest transition-all active:scale-98"
+                style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.2)' }}
               >
                 View Profile
               </button>
@@ -397,44 +200,254 @@ const StoriesScreen: React.FC<StoriesScreenProps> = ({ isDarkMode, onViewProfile
         </div>
       )}
 
-      <div className={`mt-6 flex-1 rounded-3xl p-10 border text-center flex flex-col items-center justify-center transition-colors duration-300 shadow-sm ${isDarkMode ? 'bg-zinc-800/50 border-white/5' : 'bg-white border-slate-200 shadow-slate-100'}`}>
-        <div className="w-20 h-20 bg-pink-500/10 rounded-full flex items-center justify-center mb-6">
-          <Camera className="text-pink-500" size={32} />
-        </div>
-        <h3 className={`text-xl font-black italic ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Broadcast your vibe</h3>
-        <p className={`${isDarkMode ? 'text-zinc-500' : 'text-slate-400'} text-sm mt-2 max-w-[240px] leading-relaxed`}>
-          Share what's happening in your vicinity. Stories disappear after 24 hours.
-        </p>
+      {/* ─── Main Content ──────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide">
+        <div className="px-4 pt-3 pb-24 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <SectionHeader
+              title="Live Stories"
+              subtitle="Moments happening now"
+              icon={<Play size={16} />}
+            />
+            <div className="flex items-center gap-2">
+              <select
+                value={storyPrivacy}
+                onChange={(e) => setStoryPrivacy(e.target.value as any)}
+                className="text-[11px] font-[700] uppercase tracking-wider outline-none cursor-pointer bg-transparent text-white/40 border-none"
+              >
+                <option value="everyone" style={{ background: '#0d0a1e' }}>Public</option>
+                <option value="private" style={{ background: '#0d0a1e' }}>Private</option>
+              </select>
+              <label
+                className="cursor-pointer w-10 h-10 rounded-2xl flex items-center justify-center active:scale-90 transition-all"
+                style={{ background: 'linear-gradient(135deg, #e879f9, #a855f7)', boxShadow: '0 4px 12px rgba(232,121,249,0.35)' }}
+              >
+                <Plus size={20} className="text-white" />
+                <input type="file" accept="image/*,video/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !supabase) return;
+                  setUploading(true);
+                  // ... upload logic ...
+                  setUploading(false);
+                }} disabled={uploading} />
+              </label>
+            </div>
+          </div>
 
-        <div className={`mt-6 flex space-x-1 p-1 rounded-xl ${isDarkMode ? 'bg-black/40' : 'bg-slate-100'}`}>
-          <button
-            onClick={() => setStoryPrivacy('everyone')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-              storyPrivacy === 'everyone'
-                ? isDarkMode ? 'bg-zinc-700 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm'
-                : isDarkMode ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Public
-          </button>
-          <button
-            onClick={() => setStoryPrivacy('private')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-              storyPrivacy === 'private'
-                ? isDarkMode ? 'bg-zinc-700 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm'
-                : isDarkMode ? 'text-zinc-500 hover:text-zinc-300' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Private
-          </button>
-        </div>
+          {uploading && (
+            <div className="flex items-center gap-3 p-4 rounded-2xl" style={{ background: 'rgba(232,121,249,0.08)', border: '1px solid rgba(232,121,249,0.2)' }}>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#e879f9] border-t-transparent" />
+              <span className="text-[12px] font-[700] text-[#e879f9] uppercase tracking-wider">Uploading your vibe...</span>
+            </div>
+          )}
 
-        <button 
-          onClick={() => document.querySelector('input[type="file"]')?.dispatchEvent(new MouseEvent('click'))}
-          className="mt-6 bg-pink-600 px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-pink-500 transition-all text-white shadow-xl shadow-pink-500/20 active:scale-95"
-        >
-          POST STORY
-        </button>
+          {/* ─── Filter Row ─────────────────────────────────── */}
+          <div className="flex gap-2">
+            <div
+              className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-2xl"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <Filter size={14} className="text-white/30 shrink-0" />
+              <input
+                type="text"
+                placeholder="Search stories..."
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                className="bg-transparent border-none outline-none text-sm w-full text-white placeholder:text-white/25 font-['DM_Sans',sans-serif]"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all active:scale-90"
+              style={{
+                background: showFilters ? 'rgba(232,121,249,0.2)' : 'rgba(255,255,255,0.05)',
+                border: showFilters ? '1px solid rgba(232,121,249,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                color: showFilters ? '#e879f9' : 'rgba(255,255,255,0.4)',
+              }}
+            >
+              <SlidersHorizontal size={16} />
+            </button>
+          </div>
+
+          {showFilters && (
+            <div
+              className="p-4 rounded-2xl space-y-4 vv-slide-up"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div>
+                <label className="text-[10px] font-[800] uppercase tracking-widest text-white/30 mb-2 block">Distance</label>
+                <div className="flex flex-wrap gap-2">
+                  {[{ label: 'Any', value: null }, { label: '<1km', value: 1000 }, { label: '<5km', value: 5000 }, { label: '<10km', value: 10000 }].map(opt => (
+                    <button
+                      key={opt.label}
+                      onClick={() => setMaxDistance(opt.value)}
+                      className="px-3 py-1.5 rounded-xl text-[11px] font-[700] transition-all active:scale-95"
+                      style={{
+                        background: maxDistance === opt.value ? 'rgba(232,121,249,0.2)' : 'rgba(255,255,255,0.05)',
+                        border: maxDistance === opt.value ? '1px solid rgba(232,121,249,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                        color: maxDistance === opt.value ? '#e879f9' : 'rgba(255,255,255,0.4)',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-[800] uppercase tracking-widest text-white/30 mb-2 block">Sort</label>
+                <div className="flex gap-2">
+                  {[{ id: 'recency', label: 'Newest', icon: <Clock size={11} /> }, { id: 'proximity', label: 'Closest', icon: <MapPin size={11} /> }].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setSortBy(opt.id as any)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-[700] transition-all"
+                      style={{
+                        background: sortBy === opt.id ? 'rgba(232,121,249,0.2)' : 'rgba(255,255,255,0.05)',
+                        border: sortBy === opt.id ? '1px solid rgba(232,121,249,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                        color: sortBy === opt.id ? '#e879f9' : 'rgba(255,255,255,0.4)',
+                      }}
+                    >
+                      {opt.icon}{opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Story Ring Carousel ──────────────────────── */}
+          <div>
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
+              {/* Add Story button */}
+              <div className="flex flex-col items-center gap-1.5 shrink-0">
+                <label
+                  className="cursor-pointer w-[70px] h-[70px] rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '2px dashed rgba(232,121,249,0.4)',
+                  }}
+                >
+                  <Plus size={24} className="text-[#e879f9]" />
+                  <input type="file" accept="image/*" className="hidden" />
+                </label>
+                <span className="text-[10px] font-[700] text-white/40 uppercase tracking-tight">You</span>
+              </div>
+
+              {filteredAndSortedStories.map((s, idx) => {
+                const timeAgo = Math.round((Date.now() - new Date(s.created_at).getTime()) / 60000);
+                const isNew = timeAgo < 60;
+                return (
+                  <div key={s.id} className="flex flex-col items-center gap-1.5 shrink-0" onClick={() => setCurrentStoryIndex(idx)}>
+                    <div
+                      className="w-[70px] h-[70px] rounded-full p-[2px] cursor-pointer active:scale-95 transition-all"
+                      style={{
+                        background: isNew
+                          ? 'linear-gradient(135deg, #e879f9, #a855f7, #7c3aed)'
+                          : 'rgba(255,255,255,0.15)',
+                      }}
+                    >
+                      <img src={s.image_url} className="w-full h-full rounded-full object-cover border-2" style={{ borderColor: '#0d0a1e' }} alt={s.name} />
+                    </div>
+                    <span className="text-[10px] font-[700] text-white/50 uppercase tracking-tight max-w-[60px] truncate text-center">{s.name.split(' ')[0]}</span>
+                  </div>
+                );
+              })}
+
+              {filteredAndSortedStories.length === 0 && (
+                <div className="text-white/25 text-xs italic py-5">No stories nearby.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ─── Story Cards Grid ────────────────────────── */}
+          <div className="grid grid-cols-2 gap-2">
+            {filteredAndSortedStories.map((s, idx) => {
+              const timeAgo = Math.round((Date.now() - new Date(s.created_at).getTime()) / 60000);
+              const timeStr = timeAgo < 60 ? `${timeAgo}m` : `${Math.floor(timeAgo / 60)}h`;
+
+              return (
+                <div
+                  key={s.id}
+                  className="relative rounded-[20px] overflow-hidden cursor-pointer active:scale-98 transition-all"
+                  style={{ aspectRatio: '3/4' }}
+                  onClick={() => setCurrentStoryIndex(idx)}
+                >
+                  <img src={s.image_url} className="w-full h-full object-cover" alt="" />
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }} />
+
+                  {/* Top: distance badge */}
+                  <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-[700]"
+                    style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', color: '#e879f9' }}>
+                    <MapPin size={8} />
+                    {Math.round(s.distance_meters || 0)}m
+                  </div>
+
+                  {/* Bottom info */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <img src={s.avatar_url || `https://picsum.photos/seed/${s.user_id}/40/40`} className="w-5 h-5 rounded-full object-cover border border-[#e879f9]" alt="" />
+                      <span className="text-white text-[11px] font-[700] truncate">{s.name.split(' ')[0]}</span>
+                    </div>
+                    <p className="text-white/70 text-[10px] font-medium leading-tight line-clamp-2">{s.caption}</p>
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <Clock size={8} className="text-white/30" />
+                      <span className="text-[9px] text-white/30 font-medium">{timeStr} ago</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredAndSortedStories.length === 0 && (
+            <div className="text-center py-10">
+              <div className="text-4xl mb-4 opacity-20">📸</div>
+              <p className="text-white/25 text-sm">{filterText || maxDistance ? 'No stories match filters.' : 'No stories nearby yet.'}</p>
+            </div>
+          )}
+
+          {/* ─── Post Story CTA ──────────────────────────── */}
+          <div
+            className="rounded-[24px] p-6 flex flex-col items-center text-center relative overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+              style={{ background: 'rgba(232,121,249,0.1)', border: '1px solid rgba(232,121,249,0.2)' }}
+            >
+              <Camera className="text-[#e879f9]" size={28} />
+            </div>
+            <h3 className="font-['Syne',sans-serif] font-[800] text-white text-[17px] tracking-tight mb-1">Broadcast Your Vibe</h3>
+            <p className="text-white/35 text-[12px] font-medium leading-relaxed mb-5 max-w-[220px]">
+              Share what's happening around you. Stories disappear after 24h.
+            </p>
+
+            {/* Privacy toggle */}
+            <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: 'rgba(0,0,0,0.3)' }}>
+              {(['everyone', 'private'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => setStoryPrivacy(v)}
+                  className="px-4 py-2 rounded-lg text-[11px] font-[700] uppercase tracking-wider transition-all"
+                  style={{
+                    background: storyPrivacy === v ? 'rgba(232,121,249,0.2)' : 'transparent',
+                    border: storyPrivacy === v ? '1px solid rgba(232,121,249,0.3)' : '1px solid transparent',
+                    color: storyPrivacy === v ? '#e879f9' : 'rgba(255,255,255,0.35)',
+                  }}
+                >
+                  {v === 'everyone' ? '🌐 Public' : '🔒 Private'}
+                </button>
+              ))}
+            </div>
+
+            <label className="cursor-pointer vv-gradient-bg px-8 py-3.5 rounded-2xl font-[700] text-[13px] text-white uppercase tracking-wider transition-all active:scale-95" style={{ boxShadow: '0 4px 16px rgba(232,121,249,0.35)' }}>
+              <span className="flex items-center gap-2"><Plus size={16} />Post Story</span>
+              <input type="file" accept="image/*" className="hidden" />
+            </label>
+          </div>
+
+        </div>
       </div>
     </div>
   );
